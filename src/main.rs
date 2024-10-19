@@ -1,11 +1,12 @@
 use std::f32::consts::PI;
 
-use bevy::{math::vec3, prelude::*, sprite::MaterialMesh2dBundle, window::PrimaryWindow};
+use bevy::{math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap, window::PrimaryWindow};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // prevents blurry sprites
-        .insert_resource(InputState { drag_start: None, dropping_items: false })
+        .insert_resource(InputState::default())
+        .insert_resource(GameWorld::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Update, (move_player, update_camera).chain())
         .add_systems(Update, (mouse_button_events, handle_player_actions))
@@ -34,6 +35,11 @@ impl TileType {
     }
 }
 
+#[derive(Resource, Default)]
+struct GameWorld {
+    tiles: HashMap<(i32, i32), PlacedTile>,
+}
+
 mod items {
     use super::ItemType;
 
@@ -48,10 +54,11 @@ mod tiles {
 
 const PLAYER_SPEED: f32 = 200.;
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct InputState {
     drag_start: Option<Vec2>,
     dropping_items: bool,
+    deleting_tile: bool,
 }
 
 fn handle_player_actions(
@@ -61,6 +68,8 @@ fn handle_player_actions(
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     input_state: ResMut<InputState>,
+    mut game_world: ResMut<GameWorld>,
+    q_tiles: Query<(Entity, &PlacedTile)>,
 ) {
     let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
     let texture_atlas_layout = texture_atlas_layouts.add(layout);
@@ -86,6 +95,15 @@ fn handle_player_actions(
             ));
         }
 
+        if input_state.deleting_tile {
+            let xx = (pos.x / 32.0 + 0.5).floor() as i32;
+            let yy = (pos.y / 32.0 + 0.5).floor() as i32;
+            if let Some((entity, _)) = q_tiles.iter().find(|(_, tile)| tile.x == xx && tile.y == yy) {
+                game_world.tiles.remove(&(xx, yy));
+                commands.entity(entity).despawn();
+            }
+        }
+
         if let Some(drag_start) = input_state.drag_start {
             let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
             let texture_atlas_layout = texture_atlas_layouts.add(layout);
@@ -95,8 +113,10 @@ fn handle_player_actions(
             let curr_x = pos.x;
             let curr_y = pos.y;
 
-            let steps =
-                ((curr_x - prev_x).abs().max((curr_y - prev_y).abs()) / 32.0 * 10.0) as i32 + 1;
+            let dist_x = (curr_x - prev_x).abs();
+            let dist_y = (curr_y - prev_y).abs();
+            let steps = (dist_x.max(dist_y) / 32.0 * 10.0) as i32 + 1;
+
             let dx = (curr_x - prev_x) / steps as f32;
             let dy = (curr_y - prev_y) / steps as f32;
 
@@ -106,13 +126,18 @@ fn handle_player_actions(
                 let xx = (x / 32.0 + 0.5).floor() as i32;
                 let yy = (y / 32.0 + 0.5).floor() as i32;
 
-                commands.spawn(create_belt(
-                    &asset_server,
-                    texture_atlas_layout.clone(),
-                    xx,
-                    yy,
-                    0,
-                ));
+                if !game_world.tiles.contains_key(&(xx, yy)) {
+                    game_world.tiles.insert((xx, yy), PlacedTile { tile_type: tiles::BELT, x: xx, y: yy });
+
+                    commands.spawn(create_placed_tile(
+                        &asset_server,
+                        texture_atlas_layout.clone(),
+                        tiles::BELT,
+                        xx,
+                        yy,
+                        0,
+                    ));
+                }
             }
         }
     }
@@ -138,6 +163,7 @@ fn mouse_button_events(
         } else {
             input_state.drag_start = None;
         }
+        input_state.deleting_tile = buttons.pressed(MouseButton::Right);
     } else {
         // mouse is outside the window
         input_state.drag_start = None;
@@ -173,6 +199,8 @@ struct DroppedItem {
 #[derive(Component)]
 struct PlacedTile {
     tile_type: TileType,
+    x: i32,
+    y: i32,
 }
 
 fn setup_scene(
@@ -209,13 +237,6 @@ fn setup_scene(
         }
     }
 
-    commands.spawn(create_iron_sheet(
-        &asset_server,
-        texture_atlas_layout.clone(),
-        5.0,
-        3.0,
-    ));
-
     // Player
     commands.spawn((
         Player,
@@ -229,32 +250,6 @@ fn setup_scene(
             ..default()
         },
     ));
-}
-
-fn create_iron_sheet(
-    asset_server: &Res<AssetServer>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    x: f32,
-    y: f32,
-) -> impl Bundle {
-    create_dropped_item(asset_server, texture_atlas_layout, items::IRON_SHEET, x, y)
-}
-
-fn create_belt(
-    asset_server: &Res<AssetServer>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    x: i32,
-    y: i32,
-    rotation: u8,
-) -> impl Bundle {
-    create_placed_tile(
-        asset_server,
-        texture_atlas_layout,
-        tiles::BELT,
-        x as f32,
-        y as f32,
-        rotation,
-    )
 }
 
 fn create_dropped_item(
@@ -287,17 +282,17 @@ fn create_placed_tile(
     asset_server: &Res<AssetServer>,
     texture_atlas_layout: Handle<TextureAtlasLayout>,
     tile_type: TileType,
-    x: f32,
-    y: f32,
+    x: i32,
+    y: i32,
     rotation: u8,
 ) -> impl Bundle {
     let item_texture = asset_server.load(format!("textures/items/{}.png", tile_type.texture_name));
     (
-        PlacedTile { tile_type },
+        PlacedTile { tile_type, x, y },
         SpriteBundle {
             transform: Transform::from_scale(Vec3::splat(1.0))
                 .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
-                .with_translation(vec3(x * 32.0, y * 32.0, Layer::Tile.depth())),
+                .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
             texture: item_texture.clone(),
             ..default()
         },
