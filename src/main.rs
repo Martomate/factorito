@@ -17,6 +17,17 @@ fn main() {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+struct ResourceType {
+    texture_name: &'static str,
+}
+
+impl ResourceType {
+    const fn new(texture_name: &'static str) -> Self {
+        Self { texture_name }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct ItemType {
     texture_name: &'static str,
 }
@@ -41,6 +52,12 @@ impl TileType {
 #[derive(Resource, Default)]
 struct GameWorld {
     tiles: HashMap<(i32, i32), PlacedTile>,
+}
+
+mod resources {
+    use super::ResourceType;
+
+    pub static IRON_ORE: ResourceType = ResourceType::new("iron_ore");
 }
 
 mod items {
@@ -218,6 +235,7 @@ fn mouse_button_events(
 
 enum Layer {
     Background,
+    Resource,
     Tile,
     Item,
     Player,
@@ -227,9 +245,10 @@ impl Layer {
     fn depth(&self) -> f32 {
         match self {
             Layer::Background => 0.0,
-            Layer::Tile => 0.1,
-            Layer::Item => 0.2,
-            Layer::Player => 0.3,
+            Layer::Resource => 0.1,
+            Layer::Tile => 0.2,
+            Layer::Item => 0.3,
+            Layer::Player => 0.4,
         }
     }
 }
@@ -248,6 +267,11 @@ struct PlacedTile {
     rotation: u8,
     x: i32,
     y: i32,
+}
+
+#[derive(Component)]
+struct ResourceTile {
+    resource_type: ResourceType,
 }
 
 fn setup_scene(
@@ -283,6 +307,12 @@ fn setup_scene(
             ));
         }
     }
+
+    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 5, 3));
+    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 5, 4));
+    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 5, 5));
+    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 6, 4));
+    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 6, 5));
 
     // Player
     commands.spawn((
@@ -339,6 +369,29 @@ fn create_placed_tile(
         SpriteBundle {
             transform: Transform::from_scale(Vec3::splat(1.0))
                 .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
+                .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
+            texture: item_texture.clone(),
+            ..default()
+        },
+        TextureAtlas {
+            layout: texture_atlas_layout.clone(),
+            index: 0,
+        },
+    )
+}
+
+fn create_resource_tile(
+    asset_server: &Res<AssetServer>,
+    texture_atlas_layout: Handle<TextureAtlasLayout>,
+    resource_type: ResourceType,
+    x: i32,
+    y: i32,
+) -> impl Bundle {
+    let item_texture = asset_server.load(format!("textures/resources/{}.png", resource_type.texture_name));
+    (
+        ResourceTile { resource_type },
+        SpriteBundle {
+            transform: Transform::from_scale(Vec3::splat(1.0))
                 .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
             texture: item_texture.clone(),
             ..default()
