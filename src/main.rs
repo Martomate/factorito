@@ -105,7 +105,8 @@ fn update_preview_tile(
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     input_state: Res<InputState>,
-    q_preview_tile: Query<Entity, With<TilePreview>>,
+    q_preview_tile: Query<Entity, With<PreviewTile>>,
+    game_world: Res<GameWorld>,
 ) {
     let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
     let texture_atlas_layout = texture_atlas_layouts.add(layout);
@@ -136,17 +137,16 @@ fn update_preview_tile(
                 let x = (pos.x / 32.0 + 0.5).floor() as i32;
                 let y = (pos.y / 32.0 + 0.5).floor() as i32;
 
-                commands.spawn((
-                    create_placed_tile(
+                if !game_world.tiles.contains_key(&(x, y)) {
+                    commands.spawn((create_preview_tile(
                         &asset_server,
                         texture_atlas_layout.clone(),
                         tile_type,
                         x,
                         y,
                         input_state.rotation,
-                    ),
-                    TilePreview,
-                ));
+                    ),));
+                }
             }
         }
     }
@@ -401,7 +401,7 @@ struct ResourceTile {
 }
 
 #[derive(Component)]
-struct TilePreview;
+struct PreviewTile;
 
 fn setup_scene(
     mut commands: Commands,
@@ -514,6 +514,32 @@ fn create_dropped_item(
     )
 }
 
+fn create_preview_tile(
+    asset_server: &Res<AssetServer>,
+    texture_atlas_layout: Handle<TextureAtlasLayout>,
+    tile_type: TileType,
+    x: i32,
+    y: i32,
+    rotation: u8,
+) -> impl Bundle {
+    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.texture_name));
+    (
+        PreviewTile,
+        SpriteBundle {
+            transform: Transform::from_scale(Vec3::splat(1.0))
+                .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
+                .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
+            texture: item_texture.clone(),
+            sprite: Sprite { color: Color::srgba(1.0, 1.0, 1.0, 0.7), ..Default::default() },
+            ..default()
+        },
+        TextureAtlas {
+            layout: texture_atlas_layout.clone(),
+            index: 0,
+        },
+    )
+}
+
 fn create_placed_tile(
     asset_server: &Res<AssetServer>,
     texture_atlas_layout: Handle<TextureAtlasLayout>,
@@ -593,11 +619,6 @@ fn update_camera(
     let Vec3 { x, y, .. } = player.translation;
     let direction = Vec3::new(x, y, camera.translation.z);
 
-    // Applies a smooth effect to camera movement using interpolation between
-    // the camera position and the player position on the x and y axes.
-    // Here we use the in-game time, to get the elapsed time (in seconds)
-    // since the previous update. This avoids jittery movement when tracking
-    // the player.
     camera.translation = camera
         .translation
         .lerp(direction, time.delta_seconds() * 4.0);
@@ -648,6 +669,9 @@ fn move_player(
     }
     if kb_input.just_pressed(KeyCode::KeyM) {
         input_state.item_in_hand = Some(items::MINER);
+    }
+    if kb_input.just_pressed(KeyCode::KeyQ) {
+        input_state.item_in_hand = None;
     }
 
     let move_delta = direction.normalize_or_zero() * PLAYER_SPEED * time.delta_seconds();
