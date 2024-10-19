@@ -1,6 +1,8 @@
 use std::f32::consts::PI;
 
-use bevy::{math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap, window::PrimaryWindow};
+use bevy::{
+    math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap, window::PrimaryWindow,
+};
 
 fn main() {
     App::new()
@@ -10,6 +12,7 @@ fn main() {
         .add_systems(Startup, setup_scene)
         .add_systems(Update, (move_player, update_camera).chain())
         .add_systems(Update, (mouse_button_events, handle_player_actions))
+        .add_systems(FixedUpdate, update_tiles)
         .run();
 }
 
@@ -59,6 +62,7 @@ struct InputState {
     drag_start: Option<Vec2>,
     dropping_items: bool,
     deleting_tile: bool,
+    rotation: u8,
 }
 
 fn handle_player_actions(
@@ -98,7 +102,10 @@ fn handle_player_actions(
         if input_state.deleting_tile {
             let xx = (pos.x / 32.0 + 0.5).floor() as i32;
             let yy = (pos.y / 32.0 + 0.5).floor() as i32;
-            if let Some((entity, _)) = q_tiles.iter().find(|(_, tile)| tile.x == xx && tile.y == yy) {
+            if let Some((entity, _)) = q_tiles
+                .iter()
+                .find(|(_, tile)| tile.x == xx && tile.y == yy)
+            {
                 game_world.tiles.remove(&(xx, yy));
                 commands.entity(entity).despawn();
             }
@@ -127,7 +134,15 @@ fn handle_player_actions(
                 let yy = (y / 32.0 + 0.5).floor() as i32;
 
                 if !game_world.tiles.contains_key(&(xx, yy)) {
-                    game_world.tiles.insert((xx, yy), PlacedTile { tile_type: tiles::BELT, x: xx, y: yy });
+                    game_world.tiles.insert(
+                        (xx, yy),
+                        PlacedTile {
+                            tile_type: tiles::BELT,
+                            rotation: input_state.rotation,
+                            x: xx,
+                            y: yy,
+                        },
+                    );
 
                     commands.spawn(create_placed_tile(
                         &asset_server,
@@ -135,8 +150,39 @@ fn handle_player_actions(
                         tiles::BELT,
                         xx,
                         yy,
-                        0,
+                        input_state.rotation,
                     ));
+                }
+            }
+        }
+    }
+}
+
+fn update_tiles(
+    q_tiles: Query<&PlacedTile>,
+    mut q_items: Query<&mut Transform, With<DroppedItem>>,
+) {
+    for tile in q_tiles.iter() {
+        let tx = tile.x as f32 * 32.0;
+        let ty = tile.y as f32 * 32.0 - 16.0;
+
+        if tile.tile_type == tiles::BELT {
+            for mut transform in q_items.iter_mut() {
+                let item_pos = &mut transform.translation;
+
+                if item_pos.x + 8.0 >= tx
+                    && item_pos.x + 8.0 < tx + 32.0
+                    && item_pos.y + 8.0 >= ty
+                    && item_pos.y + 8.0 < ty + 32.0
+                {
+                    let dir = match tile.rotation {
+                        0 => vec3(1.0, 0.0, 0.0),
+                        1 => vec3(0.0, 1.0, 0.0),
+                        2 => vec3(-1.0, 0.0, 0.0),
+                        3 => vec3(0.0, -1.0, 0.0),
+                        _ => unreachable!(),
+                    };
+                    transform.translation += dir;
                 }
             }
         }
@@ -156,7 +202,7 @@ fn mouse_button_events(
         .cursor_position()
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
         .map(|ray| ray.origin.truncate());
-    
+
     if let Some(pos) = mouse_pos {
         if buttons.pressed(MouseButton::Left) {
             input_state.drag_start = Some(pos);
@@ -199,6 +245,7 @@ struct DroppedItem {
 #[derive(Component)]
 struct PlacedTile {
     tile_type: TileType,
+    rotation: u8,
     x: i32,
     y: i32,
 }
@@ -288,7 +335,7 @@ fn create_placed_tile(
 ) -> impl Bundle {
     let item_texture = asset_server.load(format!("textures/items/{}.png", tile_type.texture_name));
     (
-        PlacedTile { tile_type, x, y },
+        PlacedTile { tile_type, rotation, x, y },
         SpriteBundle {
             transform: Transform::from_scale(Vec3::splat(1.0))
                 .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
@@ -363,6 +410,12 @@ fn move_player(
     }
 
     input_state.dropping_items = kb_input.pressed(KeyCode::KeyZ);
+
+    if kb_input.just_pressed(KeyCode::KeyR) {
+        input_state.rotation += 1;
+        input_state.rotation %= 4;
+        println!("Rotation: {}", input_state.rotation);
+    }
 
     let move_delta = direction.normalize_or_zero() * PLAYER_SPEED * time.delta_seconds();
     player.translation += move_delta.extend(0.);
