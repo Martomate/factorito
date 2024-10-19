@@ -101,16 +101,12 @@ struct InputState {
 fn update_preview_tile(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     input_state: Res<InputState>,
     q_preview_tile: Query<Entity, With<PreviewTile>>,
     game_world: Res<GameWorld>,
 ) {
-    let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
-    let texture_atlas_layout = texture_atlas_layouts.add(layout);
-
     if let Ok(e) = q_preview_tile.get_single() {
         commands.entity(e).despawn();
     }
@@ -138,14 +134,10 @@ fn update_preview_tile(
                 let y = (pos.y / 32.0 + 0.5).floor() as i32;
 
                 if !game_world.tiles.contains_key(&(x, y)) {
-                    commands.spawn((create_preview_tile(
-                        &asset_server,
-                        texture_atlas_layout.clone(),
-                        tile_type,
-                        x,
-                        y,
-                        input_state.rotation,
-                    ),));
+                    commands.spawn((
+                        create_preview_sprite(&asset_server, tile_type, x, y, input_state.rotation),
+                        PreviewTile,
+                    ));
                 }
             }
         }
@@ -155,7 +147,6 @@ fn update_preview_tile(
 fn handle_player_actions(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     input_state: Res<InputState>,
@@ -163,9 +154,6 @@ fn handle_player_actions(
     q_tiles: Query<(Entity, &PlacedTile)>,
     q_resource_tiles: Query<(Entity, &ResourceTile)>,
 ) {
-    let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
-    let texture_atlas_layout = texture_atlas_layouts.add(layout);
-
     let window = q_windows.single();
     let (camera, camera_transform) = q_camera.single();
 
@@ -178,13 +166,11 @@ fn handle_player_actions(
         if input_state.dropping_items {
             let xx = pos.x / 32.0;
             let yy = pos.y / 32.0;
-            commands.spawn(create_dropped_item(
-                &asset_server,
-                texture_atlas_layout.clone(),
-                items::IRON_SHEET,
-                xx,
-                yy,
-            ));
+
+            let item = DroppedItem {
+                item_type: items::IRON_SHEET,
+            };
+            commands.spawn((create_dropped_item(&asset_server, &item, xx, yy), item));
         }
 
         if input_state.deleting_tile {
@@ -200,20 +186,22 @@ fn handle_player_actions(
                 .iter()
                 .find(|(_, t)| t.x == xx && t.y == yy)
             {
-                commands.spawn(create_dropped_item(
-                    &asset_server,
-                    texture_atlas_layout,
-                    items::IRON_ORE,
-                    (pos.x + 8.0) / 32.0,
-                    (pos.y - 8.0) / 32.0,
+                let item = DroppedItem {
+                    item_type: items::IRON_ORE,
+                };
+                commands.spawn((
+                    create_dropped_item(
+                        &asset_server,
+                        &item,
+                        (pos.x + 8.0) / 32.0,
+                        (pos.y - 8.0) / 32.0,
+                    ),
+                    item,
                 ));
             }
         }
 
         if let Some(drag_start) = input_state.drag_start {
-            let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
-            let texture_atlas_layout = texture_atlas_layouts.add(layout);
-
             let prev_x = drag_start.x;
             let prev_y = drag_start.y;
             let curr_x = pos.x;
@@ -233,32 +221,39 @@ fn handle_player_actions(
                 let yy = (y / 32.0 + 0.5).floor() as i32;
 
                 if let Some(item_in_hand) = input_state.item_in_hand {
-                    let tile = match item_in_hand {
-                        i if i == items::BELT => Some(tiles::BELT),
-                        i if i == items::MINER => Some(tiles::MINER),
-                        _ => None,
-                    };
-                    if let Some(tile_type) = tile {
-                        if !game_world.tiles.contains_key(&(xx, yy)) {
-                            game_world.tiles.insert(
-                                (xx, yy),
-                                PlacedTile {
+                    if !game_world.tiles.contains_key(&(xx, yy)) {
+                        match item_in_hand {
+                            i if i == items::BELT => {
+                                let tile = PlacedTile {
                                     tile_type: tiles::BELT,
                                     rotation: input_state.rotation,
                                     x: xx,
                                     y: yy,
-                                },
-                            );
+                                };
+                                game_world.tiles.insert((xx, yy), tile.clone());
 
-                            commands.spawn(create_placed_tile(
-                                &asset_server,
-                                texture_atlas_layout.clone(),
-                                tile_type,
-                                xx,
-                                yy,
-                                input_state.rotation,
-                            ));
-                        }
+                                commands.spawn((create_tile_sprite(&asset_server, &tile), tile));
+                            }
+                            i if i == items::MINER => {
+                                let tile = PlacedTile {
+                                    tile_type: tiles::MINER,
+                                    rotation: input_state.rotation,
+                                    x: xx,
+                                    y: yy,
+                                };
+                                game_world.tiles.insert((xx, yy), tile.clone());
+
+                                commands.spawn((
+                                    create_tile_sprite(&asset_server, &tile),
+                                    tile,
+                                    ResourceProducer {
+                                        timer: Timer::from_seconds(1.0, TimerMode::Once),
+                                        resource: resources::IRON_ORE,
+                                    },
+                                ));
+                            }
+                            _ => {}
+                        };
                     }
                 }
             }
@@ -269,7 +264,6 @@ fn handle_player_actions(
 fn update_tiles(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     q_tiles: Query<&PlacedTile>,
     mut q_items: Query<&mut Transform, With<DroppedItem>>,
     q_resource_tiles: Query<&ResourceTile>,
@@ -302,9 +296,6 @@ fn update_tiles(
                 .iter()
                 .find(|t| t.x == tile.x && t.y == tile.y)
             {
-                let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
-                let texture_atlas_layout = texture_atlas_layouts.add(layout);
-
                 let dir = match tile.rotation {
                     0 => vec2(1.0, 0.0),
                     1 => vec2(0.0, 1.0),
@@ -318,12 +309,15 @@ fn update_tiles(
                     _ => unimplemented!(),
                 };
 
-                commands.spawn(create_dropped_item(
-                    &asset_server,
-                    texture_atlas_layout,
-                    item_type,
-                    tile.x as f32 + 0.25 + dir.x * 0.75,
-                    tile.y as f32 - 0.25 + dir.y * 0.75,
+                let item = DroppedItem { item_type };
+                commands.spawn((
+                    create_dropped_item(
+                        &asset_server,
+                        &item,
+                        tile.x as f32 + 0.25 + dir.x * 0.75,
+                        tile.y as f32 - 0.25 + dir.y * 0.75,
+                    ),
+                    item,
                 ));
             }
         }
@@ -385,12 +379,18 @@ struct DroppedItem {
     item_type: ItemType,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 struct PlacedTile {
     tile_type: TileType,
     rotation: u8,
     x: i32,
     y: i32,
+}
+
+#[derive(Component)]
+struct ResourceProducer {
+    timer: Timer,
+    resource: ResourceType,
 }
 
 #[derive(Component)]
@@ -408,70 +408,33 @@ fn setup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
-    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let dirt_texture = asset_server.load("textures/bg/dirt.png");
-
-    let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
-    let texture_atlas_layout = texture_atlas_layouts.add(layout);
 
     commands.spawn(Camera2dBundle::default());
 
     for y in -100..=100 {
         for x in -100..=100 {
-            commands.spawn((
-                SpriteBundle {
-                    transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
-                        x as f32 * 32.0,
-                        y as f32 * 32.0,
-                        Layer::Background.depth(),
-                    )),
-                    texture: dirt_texture.clone(),
-                    ..default()
-                },
-                TextureAtlas {
-                    layout: texture_atlas_layout.clone(),
-                    index: 0,
-                },
-            ));
+            commands.spawn((SpriteBundle {
+                transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
+                    x as f32 * 32.0,
+                    y as f32 * 32.0,
+                    Layer::Background.depth(),
+                )),
+                texture: dirt_texture.clone(),
+                ..default()
+            },));
         }
     }
 
-    commands.spawn(create_resource_tile(
-        &asset_server,
-        texture_atlas_layout.clone(),
-        resources::IRON_ORE,
-        5,
-        3,
-    ));
-    commands.spawn(create_resource_tile(
-        &asset_server,
-        texture_atlas_layout.clone(),
-        resources::IRON_ORE,
-        5,
-        4,
-    ));
-    commands.spawn(create_resource_tile(
-        &asset_server,
-        texture_atlas_layout.clone(),
-        resources::IRON_ORE,
-        5,
-        5,
-    ));
-    commands.spawn(create_resource_tile(
-        &asset_server,
-        texture_atlas_layout.clone(),
-        resources::IRON_ORE,
-        6,
-        4,
-    ));
-    commands.spawn(create_resource_tile(
-        &asset_server,
-        texture_atlas_layout.clone(),
-        resources::IRON_ORE,
-        6,
-        5,
-    ));
+    for (x, y) in [(5, 3), (5, 4), (5, 5), (6, 4), (6, 5)] {
+        let tile = ResourceTile {
+            resource_type: resources::IRON_ORE,
+            x,
+            y,
+        };
+        commands.spawn((create_resource_sprite(&asset_server, &tile), tile));
+    }
 
     // Player
     commands.spawn((
@@ -490,117 +453,79 @@ fn setup_scene(
 
 fn create_dropped_item(
     asset_server: &Res<AssetServer>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    item_type: ItemType,
+    item: &DroppedItem,
     x: f32,
     y: f32,
 ) -> impl Bundle {
-    let item_texture = asset_server.load(format!("textures/items/{}.png", item_type.texture_name));
-    (
-        DroppedItem { item_type },
-        SpriteBundle {
-            transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
-                x * 32.0,
-                y * 32.0,
-                Layer::Item.depth(),
+    let item_texture = asset_server.load(format!(
+        "textures/items/{}.png",
+        item.item_type.texture_name
+    ));
+    SpriteBundle {
+        transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
+            x * 32.0,
+            y * 32.0,
+            Layer::Item.depth(),
+        )),
+        texture: item_texture.clone(),
+        ..default()
+    }
+}
+
+fn create_preview_sprite(
+    asset_server: &Res<AssetServer>,
+    tile_type: TileType,
+    x: i32,
+    y: i32,
+    rotation: u8,
+) -> impl Bundle {
+    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.texture_name));
+
+    SpriteBundle {
+        transform: Transform::from_scale(Vec3::splat(1.0))
+            .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
+            .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
+        texture: item_texture.clone(),
+        sprite: Sprite {
+            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+            ..Default::default()
+        },
+        ..default()
+    }
+}
+
+fn create_tile_sprite(asset_server: &Res<AssetServer>, tile: &PlacedTile) -> impl Bundle {
+    let item_texture = asset_server.load(format!(
+        "textures/tiles/{}.png",
+        tile.tile_type.texture_name
+    ));
+    SpriteBundle {
+        transform: Transform::from_scale(Vec3::splat(1.0))
+            .with_rotation(Quat::from_rotation_z(PI / 2.0 * tile.rotation as f32))
+            .with_translation(vec3(
+                tile.x as f32 * 32.0,
+                tile.y as f32 * 32.0,
+                Layer::Tile.depth(),
             )),
-            texture: item_texture.clone(),
-            ..default()
-        },
-        TextureAtlas {
-            layout: texture_atlas_layout.clone(),
-            index: 0,
-        },
-    )
+        texture: item_texture.clone(),
+        ..default()
+    }
 }
 
-fn create_preview_tile(
-    asset_server: &Res<AssetServer>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    tile_type: TileType,
-    x: i32,
-    y: i32,
-    rotation: u8,
-) -> impl Bundle {
-    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.texture_name));
-    (
-        PreviewTile,
-        SpriteBundle {
-            transform: Transform::from_scale(Vec3::splat(1.0))
-                .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
-                .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
-            texture: item_texture.clone(),
-            sprite: Sprite { color: Color::srgba(1.0, 1.0, 1.0, 0.7), ..Default::default() },
-            ..default()
-        },
-        TextureAtlas {
-            layout: texture_atlas_layout.clone(),
-            index: 0,
-        },
-    )
-}
-
-fn create_placed_tile(
-    asset_server: &Res<AssetServer>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    tile_type: TileType,
-    x: i32,
-    y: i32,
-    rotation: u8,
-) -> impl Bundle {
-    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.texture_name));
-    (
-        PlacedTile {
-            tile_type,
-            rotation,
-            x,
-            y,
-        },
-        SpriteBundle {
-            transform: Transform::from_scale(Vec3::splat(1.0))
-                .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
-                .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
-            texture: item_texture.clone(),
-            ..default()
-        },
-        TextureAtlas {
-            layout: texture_atlas_layout.clone(),
-            index: 0,
-        },
-    )
-}
-
-fn create_resource_tile(
-    asset_server: &Res<AssetServer>,
-    texture_atlas_layout: Handle<TextureAtlasLayout>,
-    resource_type: ResourceType,
-    x: i32,
-    y: i32,
-) -> impl Bundle {
+fn create_resource_sprite(asset_server: &Res<AssetServer>, tile: &ResourceTile) -> impl Bundle {
     let item_texture = asset_server.load(format!(
         "textures/resources/{}.png",
-        resource_type.texture_name
+        tile.resource_type.texture_name
     ));
-    (
-        ResourceTile {
-            resource_type,
-            x,
-            y,
-        },
-        SpriteBundle {
-            transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
-                x as f32 * 32.0,
-                y as f32 * 32.0,
-                Layer::Resource.depth(),
-            )),
-            texture: item_texture.clone(),
-            ..default()
-        },
-        TextureAtlas {
-            layout: texture_atlas_layout.clone(),
-            index: 0,
-        },
-    )
+    SpriteBundle {
+        transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
+            tile.x as f32 * 32.0,
+            tile.y as f32 * 32.0,
+            Layer::Resource.depth(),
+        )),
+        texture: item_texture.clone(),
+        ..default()
+    }
 }
 
 fn update_camera(
