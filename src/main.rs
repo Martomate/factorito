@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 
 use bevy::{
-    math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap, window::PrimaryWindow,
+    math::{vec2, vec3}, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap, window::PrimaryWindow,
 };
 
 fn main() {
@@ -63,13 +63,17 @@ mod resources {
 mod items {
     use super::ItemType;
 
+    pub static IRON_ORE: ItemType = ItemType::new("iron_ore");
     pub static IRON_SHEET: ItemType = ItemType::new("iron_sheet");
+    pub static BELT: ItemType = ItemType::new("belt");
+    pub static MINER: ItemType = ItemType::new("miner");
 }
 
 mod tiles {
     use super::TileType;
 
     pub static BELT: TileType = TileType::new("belt");
+    pub static MINER: TileType = TileType::new("miner");
 }
 
 const PLAYER_SPEED: f32 = 200.;
@@ -80,6 +84,7 @@ struct InputState {
     dropping_items: bool,
     deleting_tile: bool,
     rotation: u8,
+    item_in_hand: Option<ItemType>,
 }
 
 fn handle_player_actions(
@@ -91,6 +96,7 @@ fn handle_player_actions(
     input_state: ResMut<InputState>,
     mut game_world: ResMut<GameWorld>,
     q_tiles: Query<(Entity, &PlacedTile)>,
+    q_resource_tiles: Query<(Entity, &ResourceTile)>,
 ) {
     let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
     let texture_atlas_layout = texture_atlas_layouts.add(layout);
@@ -125,6 +131,17 @@ fn handle_player_actions(
             {
                 game_world.tiles.remove(&(xx, yy));
                 commands.entity(entity).despawn();
+            } else if let Some((_, _)) = q_resource_tiles
+                .iter()
+                .find(|(_, t)| t.x == xx && t.y == yy)
+            {
+                commands.spawn(create_dropped_item(
+                    &asset_server,
+                    texture_atlas_layout,
+                    items::IRON_ORE,
+                    (pos.x + 8.0) / 32.0,
+                    (pos.y - 8.0) / 32.0,
+                ));
             }
         }
 
@@ -150,25 +167,34 @@ fn handle_player_actions(
                 let xx = (x / 32.0 + 0.5).floor() as i32;
                 let yy = (y / 32.0 + 0.5).floor() as i32;
 
-                if !game_world.tiles.contains_key(&(xx, yy)) {
-                    game_world.tiles.insert(
-                        (xx, yy),
-                        PlacedTile {
-                            tile_type: tiles::BELT,
-                            rotation: input_state.rotation,
-                            x: xx,
-                            y: yy,
-                        },
-                    );
+                if let Some(item_in_hand) = input_state.item_in_hand {
+                    let tile = match item_in_hand {
+                        i if i == items::BELT => Some(tiles::BELT),
+                        i if i == items::MINER => Some(tiles::MINER),
+                        _ => None,
+                    };
+                    if let Some(tile_type) = tile {
+                        if !game_world.tiles.contains_key(&(xx, yy)) {
+                            game_world.tiles.insert(
+                                (xx, yy),
+                                PlacedTile {
+                                    tile_type: tiles::BELT,
+                                    rotation: input_state.rotation,
+                                    x: xx,
+                                    y: yy,
+                                },
+                            );
 
-                    commands.spawn(create_placed_tile(
-                        &asset_server,
-                        texture_atlas_layout.clone(),
-                        tiles::BELT,
-                        xx,
-                        yy,
-                        input_state.rotation,
-                    ));
+                            commands.spawn(create_placed_tile(
+                                &asset_server,
+                                texture_atlas_layout.clone(),
+                                tile_type,
+                                xx,
+                                yy,
+                                input_state.rotation,
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -176,8 +202,12 @@ fn handle_player_actions(
 }
 
 fn update_tiles(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     q_tiles: Query<&PlacedTile>,
     mut q_items: Query<&mut Transform, With<DroppedItem>>,
+    q_resource_tiles: Query<&ResourceTile>,
 ) {
     for tile in q_tiles.iter() {
         let tx = tile.x as f32 * 32.0;
@@ -193,14 +223,40 @@ fn update_tiles(
                     && item_pos.y + 8.0 < ty + 32.0
                 {
                     let dir = match tile.rotation {
-                        0 => vec3(1.0, 0.0, 0.0),
-                        1 => vec3(0.0, 1.0, 0.0),
-                        2 => vec3(-1.0, 0.0, 0.0),
-                        3 => vec3(0.0, -1.0, 0.0),
+                        0 => vec2(1.0, 0.0),
+                        1 => vec2(0.0, 1.0),
+                        2 => vec2(-1.0, 0.0),
+                        3 => vec2(0.0, -1.0),
                         _ => unreachable!(),
                     };
-                    transform.translation += dir;
+                    transform.translation += dir.extend(0.0);
                 }
+            }
+        } else if tile.tile_type == tiles::MINER {
+            if let Some(res_tile) = q_resource_tiles.iter().find(|t| t.x == tile.x && t.y == tile.y) {
+                let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
+                let texture_atlas_layout = texture_atlas_layouts.add(layout);
+
+                let dir = match tile.rotation {
+                    0 => vec2(1.0, 0.0),
+                    1 => vec2(0.0, 1.0),
+                    2 => vec2(-1.0, 0.0),
+                    3 => vec2(0.0, -1.0),
+                    _ => unreachable!(),
+                };
+
+                let item_type = match res_tile.resource_type {
+                    t if t == resources::IRON_ORE => items::IRON_ORE,
+                    _ => unimplemented!(),
+                };
+
+                commands.spawn(create_dropped_item(
+                    &asset_server,
+                    texture_atlas_layout,
+                    item_type,
+                    tile.x as f32 + 0.25 + dir.x * 0.75,
+                    tile.y as f32 - 0.25 + dir.y * 0.75,
+                ));
             }
         }
     }
@@ -272,6 +328,8 @@ struct PlacedTile {
 #[derive(Component)]
 struct ResourceTile {
     resource_type: ResourceType,
+    x: i32,
+    y: i32,
 }
 
 fn setup_scene(
@@ -308,11 +366,41 @@ fn setup_scene(
         }
     }
 
-    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 5, 3));
-    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 5, 4));
-    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 5, 5));
-    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 6, 4));
-    commands.spawn(create_resource_tile(&asset_server, texture_atlas_layout.clone(), resources::IRON_ORE, 6, 5));
+    commands.spawn(create_resource_tile(
+        &asset_server,
+        texture_atlas_layout.clone(),
+        resources::IRON_ORE,
+        5,
+        3,
+    ));
+    commands.spawn(create_resource_tile(
+        &asset_server,
+        texture_atlas_layout.clone(),
+        resources::IRON_ORE,
+        5,
+        4,
+    ));
+    commands.spawn(create_resource_tile(
+        &asset_server,
+        texture_atlas_layout.clone(),
+        resources::IRON_ORE,
+        5,
+        5,
+    ));
+    commands.spawn(create_resource_tile(
+        &asset_server,
+        texture_atlas_layout.clone(),
+        resources::IRON_ORE,
+        6,
+        4,
+    ));
+    commands.spawn(create_resource_tile(
+        &asset_server,
+        texture_atlas_layout.clone(),
+        resources::IRON_ORE,
+        6,
+        5,
+    ));
 
     // Player
     commands.spawn((
@@ -363,9 +451,14 @@ fn create_placed_tile(
     y: i32,
     rotation: u8,
 ) -> impl Bundle {
-    let item_texture = asset_server.load(format!("textures/items/{}.png", tile_type.texture_name));
+    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.texture_name));
     (
-        PlacedTile { tile_type, rotation, x, y },
+        PlacedTile {
+            tile_type,
+            rotation,
+            x,
+            y,
+        },
         SpriteBundle {
             transform: Transform::from_scale(Vec3::splat(1.0))
                 .with_rotation(Quat::from_rotation_z(PI / 2.0 * rotation as f32))
@@ -387,12 +480,22 @@ fn create_resource_tile(
     x: i32,
     y: i32,
 ) -> impl Bundle {
-    let item_texture = asset_server.load(format!("textures/resources/{}.png", resource_type.texture_name));
+    let item_texture = asset_server.load(format!(
+        "textures/resources/{}.png",
+        resource_type.texture_name
+    ));
     (
-        ResourceTile { resource_type },
+        ResourceTile {
+            resource_type,
+            x,
+            y,
+        },
         SpriteBundle {
-            transform: Transform::from_scale(Vec3::splat(1.0))
-                .with_translation(vec3(x as f32 * 32.0, y as f32 * 32.0, Layer::Tile.depth())),
+            transform: Transform::from_scale(Vec3::splat(1.0)).with_translation(vec3(
+                x as f32 * 32.0,
+                y as f32 * 32.0,
+                Layer::Resource.depth(),
+            )),
             texture: item_texture.clone(),
             ..default()
         },
@@ -467,7 +570,13 @@ fn move_player(
     if kb_input.just_pressed(KeyCode::KeyR) {
         input_state.rotation += 1;
         input_state.rotation %= 4;
-        println!("Rotation: {}", input_state.rotation);
+    }
+
+    if kb_input.just_pressed(KeyCode::KeyB) {
+        input_state.item_in_hand = Some(items::BELT);
+    }
+    if kb_input.just_pressed(KeyCode::KeyM) {
+        input_state.item_in_hand = Some(items::MINER);
     }
 
     let move_delta = direction.normalize_or_zero() * PLAYER_SPEED * time.delta_seconds();
