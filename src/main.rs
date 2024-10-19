@@ -1,7 +1,11 @@
 use std::f32::consts::PI;
 
 use bevy::{
-    math::{vec2, vec3}, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap, window::PrimaryWindow,
+    math::{vec2, vec3},
+    prelude::*,
+    sprite::MaterialMesh2dBundle,
+    utils::HashMap,
+    window::PrimaryWindow,
 };
 
 fn main() {
@@ -11,7 +15,14 @@ fn main() {
         .insert_resource(GameWorld::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Update, (move_player, update_camera).chain())
-        .add_systems(Update, (mouse_button_events, handle_player_actions))
+        .add_systems(
+            Update,
+            (
+                mouse_button_events,
+                handle_player_actions,
+                update_preview_tile,
+            ),
+        )
         .add_systems(FixedUpdate, update_tiles)
         .run();
 }
@@ -87,13 +98,67 @@ struct InputState {
     item_in_hand: Option<ItemType>,
 }
 
+fn update_preview_tile(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    q_windows: Query<&Window, With<PrimaryWindow>>,
+    q_camera: Query<(&Camera, &GlobalTransform)>,
+    input_state: Res<InputState>,
+    q_preview_tile: Query<Entity, With<TilePreview>>,
+) {
+    let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
+    let texture_atlas_layout = texture_atlas_layouts.add(layout);
+
+    if let Ok(e) = q_preview_tile.get_single() {
+        commands.entity(e).despawn();
+    }
+
+    if let Some(item) = input_state.item_in_hand {
+        let tile = if item == items::BELT {
+            Some(tiles::BELT)
+        } else if item == items::MINER {
+            Some(tiles::MINER)
+        } else {
+            None
+        };
+
+        if let Some(tile_type) = tile {
+            let window = q_windows.single();
+            let (camera, camera_transform) = q_camera.single();
+
+            let mouse_pos = window
+                .cursor_position()
+                .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+                .map(|ray| ray.origin.truncate());
+
+            if let Some(pos) = mouse_pos {
+                let x = (pos.x / 32.0 + 0.5).floor() as i32;
+                let y = (pos.y / 32.0 + 0.5).floor() as i32;
+
+                commands.spawn((
+                    create_placed_tile(
+                        &asset_server,
+                        texture_atlas_layout.clone(),
+                        tile_type,
+                        x,
+                        y,
+                        input_state.rotation,
+                    ),
+                    TilePreview,
+                ));
+            }
+        }
+    }
+}
+
 fn handle_player_actions(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
-    input_state: ResMut<InputState>,
+    input_state: Res<InputState>,
     mut game_world: ResMut<GameWorld>,
     q_tiles: Query<(Entity, &PlacedTile)>,
     q_resource_tiles: Query<(Entity, &ResourceTile)>,
@@ -233,7 +298,10 @@ fn update_tiles(
                 }
             }
         } else if tile.tile_type == tiles::MINER {
-            if let Some(res_tile) = q_resource_tiles.iter().find(|t| t.x == tile.x && t.y == tile.y) {
+            if let Some(res_tile) = q_resource_tiles
+                .iter()
+                .find(|t| t.x == tile.x && t.y == tile.y)
+            {
                 let layout = TextureAtlasLayout::from_grid(UVec2::splat(32), 1, 1, None, None);
                 let texture_atlas_layout = texture_atlas_layouts.add(layout);
 
@@ -331,6 +399,9 @@ struct ResourceTile {
     x: i32,
     y: i32,
 }
+
+#[derive(Component)]
+struct TilePreview;
 
 fn setup_scene(
     mut commands: Commands,
