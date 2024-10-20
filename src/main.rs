@@ -23,7 +23,7 @@ fn main() {
                 update_preview_tile,
             ),
         )
-        .add_systems(FixedUpdate, update_tiles)
+        .add_systems(FixedUpdate, (update_tiles, update_miners))
         .run();
 }
 
@@ -291,34 +291,56 @@ fn update_tiles(
                     transform.translation += dir.extend(0.0);
                 }
             }
-        } else if tile.tile_type == tiles::MINER {
+        }
+    }
+}
+
+fn update_miners(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut q_tiles: Query<(&PlacedTile, &mut ResourceProducer)>,
+    mut q_items: Query<&mut Transform, With<DroppedItem>>,
+    q_resource_tiles: Query<&ResourceTile>,
+    time: Res<Time>,
+) {
+    for (tile, mut producer) in q_tiles.iter_mut() {
+        let tx = tile.x as f32 * 32.0;
+        let ty = tile.y as f32 * 32.0 - 16.0;
+
+        producer.timer.tick(time.delta());
+
+        if producer.timer.finished() {
+            producer.timer.reset();
+
             if let Some(res_tile) = q_resource_tiles
                 .iter()
                 .find(|t| t.x == tile.x && t.y == tile.y)
             {
-                let dir = match tile.rotation {
-                    0 => vec2(1.0, 0.0),
-                    1 => vec2(0.0, 1.0),
-                    2 => vec2(-1.0, 0.0),
-                    3 => vec2(0.0, -1.0),
-                    _ => unreachable!(),
-                };
+                if res_tile.resource_type == producer.resource {
+                    let dir = match tile.rotation {
+                        0 => vec2(1.0, 0.0),
+                        1 => vec2(0.0, 1.0),
+                        2 => vec2(-1.0, 0.0),
+                        3 => vec2(0.0, -1.0),
+                        _ => unreachable!(),
+                    };
 
-                let item_type = match res_tile.resource_type {
-                    t if t == resources::IRON_ORE => items::IRON_ORE,
-                    _ => unimplemented!(),
-                };
+                    let item_type = match res_tile.resource_type {
+                        t if t == resources::IRON_ORE => items::IRON_ORE,
+                        _ => unimplemented!(),
+                    };
 
-                let item = DroppedItem { item_type };
-                commands.spawn((
-                    create_dropped_item(
-                        &asset_server,
-                        &item,
-                        tile.x as f32 + 0.25 + dir.x * 0.75,
-                        tile.y as f32 - 0.25 + dir.y * 0.75,
-                    ),
-                    item,
-                ));
+                    let item = DroppedItem { item_type };
+                    commands.spawn((
+                        create_dropped_item(
+                            &asset_server,
+                            &item,
+                            tile.x as f32 + 0.25 + dir.x * 0.75,
+                            tile.y as f32 - 0.25 + dir.y * 0.75,
+                        ),
+                        item,
+                    ));
+                }
             }
         }
     }
