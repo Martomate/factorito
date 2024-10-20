@@ -261,11 +261,13 @@ fn handle_player_actions(
     }
 }
 
+const MIN_ITEM_DIST: f32 = 16.0;
+
 fn update_tiles(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     q_tiles: Query<&PlacedTile>,
-    mut q_items: Query<&mut Transform, With<DroppedItem>>,
+    mut q_items: Query<(Entity, &mut Transform), With<DroppedItem>>,
     q_resource_tiles: Query<&ResourceTile>,
 ) {
     for tile in q_tiles.iter() {
@@ -273,8 +275,9 @@ fn update_tiles(
         let ty = tile.y as f32 * 32.0 - 16.0;
 
         if tile.tile_type == tiles::BELT {
-            for mut transform in q_items.iter_mut() {
-                let item_pos = &mut transform.translation;
+            let mut item_movements = HashMap::new();
+            for (entity, transform) in q_items.iter() {
+                let item_pos = &transform.translation;
 
                 if item_pos.x + 8.0 >= tx
                     && item_pos.x + 8.0 < tx + 32.0
@@ -288,7 +291,24 @@ fn update_tiles(
                         3 => vec2(0.0, -1.0),
                         _ => unreachable!(),
                     };
-                    transform.translation += dir.extend(0.0);
+                    let new_pos = transform.translation + dir.extend(0.0);
+                    if !q_items
+                        .iter()
+                        .filter(|(e, _)| *e != entity)
+                        .map(|(_, tr)| tr.translation)
+                        .any(|other| {
+                            let dist_before = (other.x - item_pos.x).abs().max((other.y - item_pos.y).abs());
+                            let dist_after = (other.x - new_pos.x).abs().max((other.y - new_pos.y).abs());
+                            dist_after < MIN_ITEM_DIST && dist_after - dist_before < 1e-6
+                        })
+                    {
+                        item_movements.insert(entity, dir.extend(0.0));
+                    }
+                }
+            }
+            for (entity, mut transform) in q_items.iter_mut() {
+                if let Some(movement) = item_movements.get(&entity) {
+                    transform.translation += *movement;
                 }
             }
         }
