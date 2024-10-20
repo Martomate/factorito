@@ -1,0 +1,27 @@
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        background: #222;
+        color: white;
+      }
+    </style>
+    <title>Factorito</title>
+  </head>
+  <canvas id="app">Canvas not supported</canvas>
+  <script type="module">
+    import './restart-audio.js'
+    import init from './game/factorito.js'
+    
+    init().catch((error) => {
+      if (!error.message.startsWith("Using exceptions for control flow,")) {
+        throw error;
+      }
+    });
+  </script>
+
+  <div>
+    <h3>The factory must grow!</h3>
+  </div>
+</html>

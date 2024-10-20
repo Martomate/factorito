@@ -3,5 +3,16 @@ name = "factorito"
 version = "0.1.0"
 edition = "2021"
 
+[profile.web-release]
+inherits = "release"
+codegen-units = 1
+strip = "debuginfo"
+opt-level = "z"
+lto = "thin"
+
 [dependencies]
 bevy = "0.14"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1.7"
+wasm-bindgen = "0.2.95"
