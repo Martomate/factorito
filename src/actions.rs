@@ -16,6 +16,7 @@ pub fn handle_player_actions(
     mut game_world: ResMut<GameWorld>,
     q_tiles: Query<(Entity, &PlacedTile)>,
     q_resource_tiles: Query<(Entity, &ResourceTile)>,
+    time: Res<Time>,
 ) {
     if input_state.toggling_inventory_visible {
         if let Some(e) = input_state.inventory_ui {
@@ -50,35 +51,46 @@ pub fn handle_player_actions(
         }
 
         if input_state.deleting_tile {
-            let xx = (pos.x / 32.0 + 0.5).floor() as i32;
-            let yy = (pos.y / 32.0 + 0.5).floor() as i32;
-            if let Some((entity, _)) = q_tiles
-                .iter()
-                .find(|(_, tile)| tile.x == xx && tile.y == yy)
-            {
-                game_world.tiles.remove(&(xx, yy));
-                commands.entity(entity).despawn();
-            } else if let Some((_, res)) = q_resource_tiles
-                .iter()
-                .find(|(_, t)| t.x == xx && t.y == yy)
-            {
-                let item = DroppedItem {
-                    item_type: match res.resource_type {
-                        r if r == resources::IRON_ORE => items::IRON_ORE,
-                        r if r == resources::COPPER_ORE => items::COPPER_ORE,
-                        _ => unreachable!(),
-                    },
-                };
-                commands.spawn((
-                    create_dropped_item_sprite(
-                        &asset_server,
-                        &item,
-                        (pos.x + 8.0) / 32.0,
-                        (pos.y - 8.0) / 32.0,
-                    ),
-                    item,
-                ));
+            match input_state.deleting_tile_timer.as_mut() {
+                Some(timer) => {
+                    if timer.tick(time.delta()).finished() {
+                        let xx = (pos.x / 32.0 + 0.5).floor() as i32;
+                        let yy = (pos.y / 32.0 + 0.5).floor() as i32;
+                        if let Some((entity, _)) = q_tiles
+                            .iter()
+                            .find(|(_, tile)| tile.x == xx && tile.y == yy)
+                        {
+                            game_world.tiles.remove(&(xx, yy));
+                            commands.entity(entity).despawn();
+                        } else if let Some((_, res)) = q_resource_tiles
+                            .iter()
+                            .find(|(_, t)| t.x == xx && t.y == yy)
+                        {
+                            let item = DroppedItem {
+                                item_type: match res.resource_type {
+                                    r if r == resources::IRON_ORE => items::IRON_ORE,
+                                    r if r == resources::COPPER_ORE => items::COPPER_ORE,
+                                    _ => unreachable!(),
+                                },
+                            };
+                            commands.spawn((
+                                create_dropped_item_sprite(
+                                    &asset_server,
+                                    &item,
+                                    (pos.x + 8.0) / 32.0,
+                                    (pos.y - 8.0) / 32.0,
+                                ),
+                                item,
+                            ));
+                        }
+                    }
+                }
+                None => {
+                    input_state.deleting_tile_timer = Some(Timer::from_seconds(1.0, TimerMode::Repeating));
+                }
             }
+        } else {
+            input_state.deleting_tile_timer = None;
         }
 
         if let Some(drag_start) = input_state.drag_start {

@@ -135,6 +135,7 @@ struct InputState {
     drag_start: Option<Vec2>,
     dropping_items: bool,
     deleting_tile: bool,
+    deleting_tile_timer: Option<Timer>,
     rotation: u8,
     item_in_hand: Option<ItemType>,
     inventory_ui: Option<Entity>,
