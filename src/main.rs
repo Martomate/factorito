@@ -91,6 +91,7 @@ mod items {
     pub static BELT: ItemType = ItemType::new("belt");
     pub static MINER: ItemType = ItemType::new("miner");
     pub static INSERTER: ItemType = ItemType::new("inserter");
+    pub static FURNACE: ItemType = ItemType::new("furnace");
 }
 
 mod tiles {
@@ -100,6 +101,7 @@ mod tiles {
     pub static MINER: TileType = TileType::new("miner");
     pub static INSERTER: TileType =
         TileType::new("inserter_base").with_rotating_part("inserter_hand");
+    pub static FURNACE: TileType = TileType::new("furnace");
 }
 
 const PLAYER_SPEED: f32 = 200.;
@@ -133,6 +135,8 @@ fn update_preview_tile(
             Some(tiles::MINER)
         } else if item == items::INSERTER {
             Some(tiles::INSERTER)
+        } else if item == items::FURNACE {
+            Some(tiles::FURNACE)
         } else {
             None
         };
@@ -304,6 +308,17 @@ fn handle_player_actions(
                                     },
                                     ItemMover { item: None },
                                 ));
+                            }
+                            i if i == items::FURNACE => {
+                                let tile = PlacedTile {
+                                    tile_type: tiles::FURNACE,
+                                    rotation: input_state.rotation,
+                                    x: xx,
+                                    y: yy,
+                                };
+                                game_world.tiles.insert((xx, yy), tile.clone());
+
+                                commands.spawn((tile.clone(), create_tile_sprite(&asset_server, &tile)));
                             }
                             _ => {}
                         };
@@ -854,6 +869,10 @@ fn move_player(
     if kb_input.just_pressed(KeyCode::KeyI) {
         input_state.item_in_hand = Some(items::INSERTER);
     }
+    if kb_input.just_pressed(KeyCode::KeyF) {
+        input_state.item_in_hand = Some(items::FURNACE);
+    }
+
     if kb_input.just_pressed(KeyCode::KeyQ) {
         input_state.item_in_hand = None;
     }
