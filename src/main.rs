@@ -494,15 +494,28 @@ fn update_miners(
                     };
 
                     let item = DroppedItem { item_type };
-                    commands.spawn((
-                        create_dropped_item(
-                            &asset_server,
-                            &item,
-                            tile.x as f32 + 0.25 + dir.x * 0.75,
-                            tile.y as f32 - 0.25 + dir.y * 0.75,
-                        ),
-                        item,
-                    ));
+                    let pos = vec2(
+                        tile.x as f32 + 0.25 + dir.x * 0.75,
+                        tile.y as f32 - 0.25 + dir.y * 0.75,
+                    );
+                    if !q_items
+                        .iter()
+                        .map(|tr| tr.translation)
+                        .any(|other| {
+                            let dist_after = (other.x - pos.x * 32.0).abs().max((other.y - pos.y * 32.0).abs());
+                            dist_after < MIN_ITEM_DIST
+                        })
+                    {
+                        commands.spawn((
+                            create_dropped_item(
+                                &asset_server,
+                                &item,
+                                pos.x,
+                                pos.y,
+                            ),
+                            item,
+                        ));
+                    }
                 }
             }
         }
