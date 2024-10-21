@@ -1,13 +1,10 @@
 use std::f32::consts::PI;
 
-use bevy::{
-    math::vec3,
-    prelude::*,
-};
+use bevy::{math::vec3, prelude::*};
 
 use crate::{calc_rotating_tile_transform, DroppedItem, Layer, PlacedTile, ResourceTile, TileType};
 
-pub fn create_dropped_item(
+pub fn create_dropped_item_sprite(
     asset_server: &Res<AssetServer>,
     item: &DroppedItem,
     x: f32,
@@ -59,10 +56,22 @@ pub fn create_rotating_preview_sprite(
     anchor: Vec2,
     start_angle: f32,
 ) -> impl Bundle {
-    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.rotating_texture_name.unwrap()));
+    let item_texture = asset_server.load(format!(
+        "textures/tiles/{}.png",
+        tile_type.rotating_texture_name.unwrap()
+    ));
 
     SpriteBundle {
-        transform: calc_rotating_tile_transform(&PlacedTile { tile_type, rotation, x, y }, anchor, start_angle),
+        transform: calc_rotating_tile_transform(
+            &PlacedTile {
+                tile_type,
+                rotation,
+                x,
+                y,
+            },
+            anchor,
+            start_angle,
+        ),
         texture: item_texture.clone(),
         sprite: Sprite {
             color: Color::srgba(1.0, 1.0, 1.0, 0.7),

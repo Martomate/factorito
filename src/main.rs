@@ -3,17 +3,18 @@ mod input;
 mod sprites;
 mod updates;
 
-use actions::*;
-use sprites::*;
-use updates::*;
-
+use bevy_prng::ChaCha8Rng;
+use bevy::{math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap};
+use bevy_rand::{plugin::EntropyPlugin, prelude::GlobalEntropy};
+use rand::Rng;
 use std::f32::consts::PI;
 
-use bevy::{math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap};
+use sprites::*;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // prevents blurry sprites
+        .add_plugins(EntropyPlugin::<ChaCha8Rng>::default())
         .insert_resource(InputState::default())
         .insert_resource(GameWorld::default())
         .add_systems(Startup, setup_scene)
@@ -22,12 +23,19 @@ fn main() {
             Update,
             (
                 input::mouse_button_events,
-                handle_player_actions,
-                update_preview_tile,
-                update_rotating_tiles,
+                actions::handle_player_actions,
+                updates::update_preview_tile,
+                updates::update_rotating_tiles,
             ),
         )
-        .add_systems(FixedUpdate, (update_tiles, update_miners, update_movers))
+        .add_systems(
+            FixedUpdate,
+            (
+                updates::update_tiles,
+                updates::update_miners,
+                updates::update_movers,
+            ),
+        )
         .run();
 }
 
@@ -189,6 +197,7 @@ fn setup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
+    mut rng: ResMut<GlobalEntropy<ChaCha8Rng>>
 ) {
     let dirt_texture = asset_server.load("textures/bg/dirt.png");
 
@@ -208,13 +217,54 @@ fn setup_scene(
         }
     }
 
-    for (x, y) in [(5, 3), (5, 4), (5, 5), (6, 4), (6, 5)] {
+    for _ in 0..100 {
+        let cx = rng.gen_range(-100..100);
+        let cy = rng.gen_range(-100..100);
+        
+        let num_tiles = rng.gen_range(5..40);
+
+        let mut taken: Vec<(i32, i32)> = Vec::new();
+
+        let x = 0;
+        let y = 0;
+        taken.push((x, y));
+        
         let tile = ResourceTile {
             resource_type: resources::IRON_ORE,
-            x,
-            y,
+            x: cx + x,
+            y: cy + y,
         };
         commands.spawn((create_resource_sprite(&asset_server, &tile), tile));
+
+        for _ in 1..num_tiles {
+            let mut found = false;
+
+            while !found {
+                let idx = rng.gen_range(0..taken.len());
+                let (sx, sy) = taken[idx];
+                for d in 0..4 {
+                    let d = d * 2 + 1;
+                    let dx = (d % 3) - 1;
+                    let dy = (d / 3) - 1;
+
+                    let x = sx + dx;
+                    let y = sy + dy;
+
+                    if !taken.contains(&(x, y)) {
+                        taken.push((x, y));
+
+                        let tile = ResourceTile {
+                            resource_type: resources::IRON_ORE,
+                            x: cx + x,
+                            y: cy + y,
+                        };
+                        commands.spawn((create_resource_sprite(&asset_server, &tile), tile));
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     // Player

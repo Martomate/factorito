@@ -3,9 +3,9 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 
 use crate::{
-    create_dropped_item, create_rotating_tile_sprite, create_tile_sprite, items, resources, tiles,
-    DroppedItem, GameWorld, InputState, ItemMover, PlacedTile, ResourceProducer, ResourceTile,
-    TileRotation,
+    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources,
+    tiles, DroppedItem, GameWorld, InputState, ItemMover, PlacedTile, ResourceProducer,
+    ResourceTile, TileRotation,
 };
 
 pub fn handle_player_actions(
@@ -34,7 +34,10 @@ pub fn handle_player_actions(
             let item = DroppedItem {
                 item_type: items::IRON_SHEET,
             };
-            commands.spawn((create_dropped_item(&asset_server, &item, xx, yy), item));
+            commands.spawn((
+                create_dropped_item_sprite(&asset_server, &item, xx, yy),
+                item,
+            ));
         }
 
         if input_state.deleting_tile {
@@ -54,7 +57,7 @@ pub fn handle_player_actions(
                     item_type: items::IRON_ORE,
                 };
                 commands.spawn((
-                    create_dropped_item(
+                    create_dropped_item_sprite(
                         &asset_server,
                         &item,
                         (pos.x + 8.0) / 32.0,

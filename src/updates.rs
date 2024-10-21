@@ -3,7 +3,9 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, utils::HashMap, window::PrimaryWindow};
 
 use crate::{
-    calc_rotating_tile_transform, create_dropped_item, create_preview_sprite, create_rotating_preview_sprite, items, resources, tiles, DroppedItem, GameWorld, InputState, ItemMover, PlacedTile, PreviewTile, ResourceProducer, ResourceTile, TileRotation
+    calc_rotating_tile_transform, create_dropped_item_sprite, create_preview_sprite,
+    create_rotating_preview_sprite, items, resources, tiles, DroppedItem, GameWorld, InputState,
+    ItemMover, PlacedTile, PreviewTile, ResourceProducer, ResourceTile, TileRotation,
 };
 
 pub fn update_preview_tile(
@@ -53,9 +55,17 @@ pub fn update_preview_tile(
                     if tile_type.rotating_texture_name.is_some() {
                         let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
                         commands.spawn((
-                            create_rotating_preview_sprite(&asset_server, tile_type, x, y, input_state.rotation, anchor, PI * 0.5),
+                            create_rotating_preview_sprite(
+                                &asset_server,
+                                tile_type,
+                                x,
+                                y,
+                                input_state.rotation,
+                                anchor,
+                                PI * 0.5,
+                            ),
                             PreviewTile,
-                        )); 
+                        ));
                     }
                 }
             }
@@ -159,7 +169,7 @@ pub fn update_movers(
                         mover.item = None;
 
                         commands.spawn((
-                            create_dropped_item(
+                            create_dropped_item_sprite(
                                 &asset_server,
                                 &item,
                                 (pos.x - 8.0) / 32.0,
@@ -238,7 +248,7 @@ pub fn update_miners(
                         dist_after < MIN_ITEM_DIST
                     }) {
                         commands.spawn((
-                            create_dropped_item(&asset_server, &item, pos.x, pos.y),
+                            create_dropped_item_sprite(&asset_server, &item, pos.x, pos.y),
                             item,
                         ));
                     }
