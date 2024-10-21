@@ -5,7 +5,8 @@ use bevy::{math::vec2, prelude::*, utils::HashMap, window::PrimaryWindow};
 use crate::{
     calc_rotating_tile_transform, create_dropped_item_sprite, create_preview_sprite,
     create_rotating_preview_sprite, items, resources, tiles, DroppedItem, GameWorld, InputState,
-    ItemMover, PlacedTile, PreviewTile, ResourceProducer, ResourceTile, TileRotation,
+    ItemMover, ItemProcessor, PlacedTile, PreviewTile, ResourceProducer, ResourceTile,
+    TileRotation,
 };
 
 pub fn update_preview_tile(
@@ -145,13 +146,28 @@ pub fn update_movers(
     asset_server: Res<AssetServer>,
     mut q_movers: Query<(&mut ItemMover, &mut TileRotation, &Transform)>,
     q_items: Query<(Entity, &Transform, &DroppedItem)>,
+    mut q_processors: Query<(&Transform, &mut ItemProcessor)>,
 ) {
     for (mut mover, mut rot, tr) in q_movers.iter_mut() {
         match mover.item {
             Some(item) => {
                 if rot.time == 1.0 {
                     let pos = tr.transform_point(vec2(0.0, 1.0 * 32.0).extend(0.0));
-                    if !q_items
+                    if let Some((_, mut pr)) = q_processors
+                        .iter_mut()
+                        .find(|(tr, _)| tr.translation.distance_squared(pos) < 16.0 * 16.0)
+                    {
+                        if pr.item.is_none() {
+                            let from = rot.to;
+                            let to = rot.from;
+                            rot.from = from;
+                            rot.to = to;
+                            rot.time = 0.0;
+
+                            mover.item = None;
+                            pr.item = Some(item);
+                        }
+                    } else if !q_items
                         .iter()
                         .map(|(_, tr, _)| tr.translation)
                         .any(|other| {
@@ -197,6 +213,27 @@ pub fn update_movers(
                         rot.time = 0.0;
 
                         mover.item = Some(it.item_type);
+                    } else if let Some((_, mut pr)) = q_processors
+                        .iter_mut()
+                        .find(|(tr, _)| tr.translation.distance_squared(pos) < 16.0 * 16.0)
+                    {
+                        if let Some((item_type, count)) = pr.output {
+                            if count > 0 {
+                                pr.output = if count > 1 {
+                                    Some((item_type, count - 1))
+                                } else {
+                                    None
+                                };
+
+                                let from = rot.to;
+                                let to = rot.from;
+                                rot.from = from;
+                                rot.to = to;
+                                rot.time = 0.0;
+
+                                mover.item = Some(item_type);
+                            }
+                        }
                     }
                 }
             }
@@ -251,6 +288,34 @@ pub fn update_miners(
                             create_dropped_item_sprite(&asset_server, &item, pos.x, pos.y),
                             item,
                         ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn update_item_processors(mut q_processors: Query<&mut ItemProcessor>, time: Res<Time>) {
+    for mut processor in q_processors.iter_mut() {
+        if processor.timer.tick(time.delta()).finished() {
+            if let Some(item_type) = processor.item {
+                if let Some(output_item_type) = match item_type {
+                    t if t == items::IRON_ORE => Some(items::IRON_SHEET),
+                    _ => None,
+                } {
+                    let new_output = if let Some(output) = processor.output {
+                        if output.0 == output_item_type {
+                            Some((output_item_type, output.1 + 1))
+                        } else {
+                            None
+                        }
+                    } else {
+                        Some((output_item_type, 1))
+                    };
+                    if let Some(new_output) = new_output {
+                        processor.item = None;
+                        processor.output = Some(new_output);
+                        processor.timer.reset();
                     }
                 }
             }

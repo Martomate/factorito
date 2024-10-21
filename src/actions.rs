@@ -3,9 +3,7 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 
 use crate::{
-    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources,
-    tiles, DroppedItem, GameWorld, InputState, ItemMover, PlacedTile, ResourceProducer,
-    ResourceTile, TileRotation,
+    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources, tiles, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor, PlacedTile, ResourceProducer, ResourceTile, TileRotation
 };
 
 pub fn handle_player_actions(
@@ -162,8 +160,13 @@ pub fn handle_player_actions(
                                 game_world.tiles.insert((xx, yy), tile.clone());
 
                                 commands.spawn((
-                                    tile.clone(),
                                     create_tile_sprite(&asset_server, &tile),
+                                    ItemProcessor {
+                                        timer: Timer::from_seconds(3.0, TimerMode::Once),
+                                        item: None,
+                                        output: None,
+                                    },
+                                    tile,
                                 ));
                             }
                             _ => {}

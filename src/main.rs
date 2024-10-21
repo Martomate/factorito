@@ -41,6 +41,7 @@ fn main() {
                 updates::update_tiles,
                 updates::update_miners,
                 updates::update_movers,
+                updates::update_item_processors,
             ),
         )
         .run();
@@ -182,6 +183,13 @@ struct PlacedTile {
 struct ResourceProducer {
     timer: Timer,
     resource: ResourceType,
+}
+
+#[derive(Component)]
+struct ItemProcessor {
+    timer: Timer,
+    item: Option<ItemType>,
+    output: Option<(ItemType, usize)>,
 }
 
 #[derive(Component)]
