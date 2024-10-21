@@ -13,7 +13,14 @@ use sprites::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // prevents blurry sprites
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Factorito".to_string(),
+                canvas: Some("#app".to_string()),
+                ..default()
+            }),
+            ..default()
+        }).set(ImagePlugin::default_nearest())) // prevents blurry sprites
         .add_plugins(EntropyPlugin::<ChaCha8Rng>::default())
         .insert_resource(InputState::default())
         .insert_resource(GameWorld::default())

@@ -19,3 +19,4 @@ tasks:
     deps: [export-web]
     cmds:
       - fly deploy --local-only
+      - rm -rf out
