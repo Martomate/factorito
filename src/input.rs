@@ -29,6 +29,10 @@ pub fn mouse_button_events(
     mut input_state: ResMut<InputState>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
 ) {
+    if input_state.inventory_ui.is_some() {
+        return;
+    }
+
     let window = q_windows.single();
     let (camera, camera_transform) = q_camera.single();
 
@@ -89,6 +93,8 @@ pub fn move_player(
         input_state.rotation += 1;
         input_state.rotation %= 4;
     }
+
+    input_state.toggling_inventory_visible = kb_input.just_pressed(KeyCode::KeyE);
 
     if kb_input.just_pressed(KeyCode::KeyB) {
         input_state.item_in_hand = Some(items::BELT);

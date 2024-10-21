@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 
 use crate::{
-    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources, tiles, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor, PlacedTile, ResourceProducer, ResourceTile, TileRotation
+    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources, tiles, ui, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor, PlacedTile, Player, ResourceProducer, ResourceTile, TileRotation
 };
 
 pub fn handle_player_actions(
@@ -11,11 +11,22 @@ pub fn handle_player_actions(
     asset_server: Res<AssetServer>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
-    input_state: Res<InputState>,
+    q_player: Query<&Player>,
+    mut input_state: ResMut<InputState>,
     mut game_world: ResMut<GameWorld>,
     q_tiles: Query<(Entity, &PlacedTile)>,
     q_resource_tiles: Query<(Entity, &ResourceTile)>,
 ) {
+    if input_state.toggling_inventory_visible {
+        if let Some(e) = input_state.inventory_ui {
+            commands.entity(e).despawn_recursive();
+            input_state.inventory_ui = None;
+        } else {
+            let player = q_player.single();
+            input_state.inventory_ui = Some(ui::create_player_inventory_ui(commands, &asset_server, player.inventory.as_ref()));
+        }
+        return;
+    }
     let window = q_windows.single();
     let (camera, camera_transform) = q_camera.single();
 

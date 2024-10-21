@@ -1,6 +1,7 @@
 mod actions;
 mod input;
 mod sprites;
+mod ui;
 mod updates;
 
 use bevy_prng::ChaCha8Rng;
@@ -33,6 +34,7 @@ fn main() {
                 actions::handle_player_actions,
                 updates::update_preview_tile,
                 updates::update_rotating_tiles,
+                ui::hanle_player_inventory_ui_events,
             ),
         )
         .add_systems(
@@ -132,6 +134,8 @@ struct InputState {
     deleting_tile: bool,
     rotation: u8,
     item_in_hand: Option<ItemType>,
+    inventory_ui: Option<Entity>,
+    toggling_inventory_visible: bool,
 }
 
 #[derive(Component)]
@@ -164,7 +168,9 @@ impl Layer {
 }
 
 #[derive(Component)]
-struct Player;
+struct Player {
+    inventory: Vec<(ItemType, usize)>,
+}
 
 #[derive(Component)]
 struct DroppedItem {
@@ -282,9 +288,12 @@ fn setup_scene(
         }
     }
 
-    // Player
     commands.spawn((
-        Player,
+        Player { inventory: vec![
+            (items::FURNACE, 10),
+            (items::BELT, 100),
+            (items::IRON_SHEET, 50),
+        ] },
         MaterialMesh2dBundle {
             mesh: meshes.add(Circle::new(5.)).into(),
             material: materials.add(Color::srgb(1.0, 1.0, 1.0)),
