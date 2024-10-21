@@ -21,6 +21,7 @@ fn main() {
                 mouse_button_events,
                 handle_player_actions,
                 update_preview_tile,
+                update_rotating_tiles,
             ),
         )
         .add_systems(FixedUpdate, (update_tiles, update_miners))
@@ -52,11 +53,22 @@ impl ItemType {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct TileType {
     texture_name: &'static str,
+    rotating_texture_name: Option<&'static str>,
 }
 
 impl TileType {
     const fn new(texture_name: &'static str) -> Self {
-        Self { texture_name }
+        Self {
+            texture_name,
+            rotating_texture_name: None,
+        }
+    }
+
+    const fn with_rotating_part(self, texture_name: &'static str) -> Self {
+        Self {
+            rotating_texture_name: Some(texture_name),
+            ..self
+        }
     }
 }
 
@@ -78,6 +90,7 @@ mod items {
     pub static IRON_SHEET: ItemType = ItemType::new("iron_sheet");
     pub static BELT: ItemType = ItemType::new("belt");
     pub static MINER: ItemType = ItemType::new("miner");
+    pub static INSERTER: ItemType = ItemType::new("inserter");
 }
 
 mod tiles {
@@ -85,6 +98,8 @@ mod tiles {
 
     pub static BELT: TileType = TileType::new("belt");
     pub static MINER: TileType = TileType::new("miner");
+    pub static INSERTER: TileType =
+        TileType::new("inserter_base").with_rotating_part("inserter_hand");
 }
 
 const PLAYER_SPEED: f32 = 200.;
@@ -104,10 +119,10 @@ fn update_preview_tile(
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
     input_state: Res<InputState>,
-    q_preview_tile: Query<Entity, With<PreviewTile>>,
+    q_preview_tiles: Query<Entity, With<PreviewTile>>,
     game_world: Res<GameWorld>,
 ) {
-    if let Ok(e) = q_preview_tile.get_single() {
+    for e in q_preview_tiles.iter() {
         commands.entity(e).despawn();
     }
 
@@ -116,6 +131,8 @@ fn update_preview_tile(
             Some(tiles::BELT)
         } else if item == items::MINER {
             Some(tiles::MINER)
+        } else if item == items::INSERTER {
+            Some(tiles::INSERTER)
         } else {
             None
         };
@@ -138,6 +155,13 @@ fn update_preview_tile(
                         create_preview_sprite(&asset_server, tile_type, x, y, input_state.rotation),
                         PreviewTile,
                     ));
+                    if tile_type.rotating_texture_name.is_some() {
+                        let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
+                        commands.spawn((
+                            create_rotating_preview_sprite(&asset_server, tile_type, x, y, input_state.rotation, anchor),
+                            PreviewTile,
+                        )); 
+                    }
                 }
             }
         }
@@ -252,12 +276,66 @@ fn handle_player_actions(
                                     },
                                 ));
                             }
+                            i if i == items::INSERTER => {
+                                let tile = PlacedTile {
+                                    tile_type: tiles::INSERTER,
+                                    rotation: input_state.rotation,
+                                    x: xx,
+                                    y: yy,
+                                };
+                                game_world.tiles.insert((xx, yy), tile.clone());
+
+                                let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
+
+                                let main_sprite = create_tile_sprite(&asset_server, &tile);
+                                let rotating_sprite =
+                                    create_rotating_tile_sprite(&asset_server, &tile, anchor);
+
+                                commands.spawn((tile.clone(), main_sprite));
+                                commands.spawn((
+                                    tile,
+                                    rotating_sprite,
+                                    TileRotation {
+                                        anchor,
+                                        speed: 2.0,
+                                        from: PI * 0.5,
+                                        to: -PI * 0.5,
+                                        time: 0.0,
+                                    },
+                                ));
+                            }
                             _ => {}
                         };
                     }
                 }
             }
         }
+    }
+}
+
+#[derive(Component)]
+struct TileRotation {
+    anchor: Vec2,
+    speed: f32,
+    from: f32,
+    to: f32,
+    time: f32,
+}
+
+fn update_rotating_tiles(
+    mut q_tiles: Query<(&mut Transform, &PlacedTile, &mut TileRotation)>,
+    time: Res<Time>,
+) {
+    for (mut tr, tile, mut rot) in q_tiles.iter_mut() {
+        rot.time += time.delta_seconds() * rot.speed;
+        if rot.time > 1.0 {
+            rot.time = 1.0;
+        }
+        *tr = calc_rotating_tile_transform(
+            tile,
+            rot.anchor,
+            rot.from.lerp(rot.to, rot.time),
+        )
     }
 }
 
@@ -297,8 +375,11 @@ fn update_tiles(
                         .filter(|(e, _)| *e != entity)
                         .map(|(_, tr)| tr.translation)
                         .any(|other| {
-                            let dist_before = (other.x - item_pos.x).abs().max((other.y - item_pos.y).abs());
-                            let dist_after = (other.x - new_pos.x).abs().max((other.y - new_pos.y).abs());
+                            let dist_before = (other.x - item_pos.x)
+                                .abs()
+                                .max((other.y - item_pos.y).abs());
+                            let dist_after =
+                                (other.x - new_pos.x).abs().max((other.y - new_pos.y).abs());
                             dist_after < MIN_ITEM_DIST && dist_after - dist_before < 1e-6
                         })
                     {
@@ -311,6 +392,7 @@ fn update_tiles(
                     transform.translation += *movement;
                 }
             }
+        } else if tile.tile_type == tiles::INSERTER {
         }
     }
 }
@@ -536,6 +618,27 @@ fn create_preview_sprite(
     }
 }
 
+fn create_rotating_preview_sprite(
+    asset_server: &Res<AssetServer>,
+    tile_type: TileType,
+    x: i32,
+    y: i32,
+    rotation: u8,
+    anchor: Vec2,
+) -> impl Bundle {
+    let item_texture = asset_server.load(format!("textures/tiles/{}.png", tile_type.rotating_texture_name.unwrap()));
+
+    SpriteBundle {
+        transform: calc_rotating_tile_transform(&PlacedTile { tile_type, rotation, x, y }, anchor, 0.0),
+        texture: item_texture.clone(),
+        sprite: Sprite {
+            color: Color::srgba(1.0, 1.0, 1.0, 0.7),
+            ..Default::default()
+        },
+        ..default()
+    }
+}
+
 fn create_tile_sprite(asset_server: &Res<AssetServer>, tile: &PlacedTile) -> impl Bundle {
     let item_texture = asset_server.load(format!(
         "textures/tiles/{}.png",
@@ -552,6 +655,36 @@ fn create_tile_sprite(asset_server: &Res<AssetServer>, tile: &PlacedTile) -> imp
         texture: item_texture.clone(),
         ..default()
     }
+}
+
+fn create_rotating_tile_sprite(
+    asset_server: &Res<AssetServer>,
+    tile: &PlacedTile,
+    anchor: Vec2,
+) -> impl Bundle {
+    let item_texture = asset_server.load(format!(
+        "textures/tiles/{}.png",
+        tile.tile_type.rotating_texture_name.unwrap()
+    ));
+
+    SpriteBundle {
+        transform: calc_rotating_tile_transform(tile, anchor, 0.0),
+        texture: item_texture.clone(),
+        ..default()
+    }
+}
+
+fn calc_rotating_tile_transform(tile: &PlacedTile, anchor: Vec2, angle: f32) -> Transform {
+    let mut transform = Transform::from_scale(Vec3::splat(1.0))
+        .with_rotation(Quat::from_rotation_z(PI / 2.0 * tile.rotation as f32))
+        .with_translation(vec3(
+            (tile.x as f32) * 32.0,
+            (tile.y as f32) * 32.0,
+            Layer::Tile.depth(),
+        ));
+    transform = transform.mul_transform(Transform::from_rotation(Quat::from_rotation_z(angle)));
+    transform = transform.mul_transform(Transform::from_translation(-anchor.extend(0.0) * 32.0));
+    transform
 }
 
 fn create_resource_sprite(asset_server: &Res<AssetServer>, tile: &ResourceTile) -> impl Bundle {
@@ -636,6 +769,9 @@ fn move_player(
     }
     if kb_input.just_pressed(KeyCode::KeyM) {
         input_state.item_in_hand = Some(items::MINER);
+    }
+    if kb_input.just_pressed(KeyCode::KeyI) {
+        input_state.item_in_hand = Some(items::INSERTER);
     }
     if kb_input.just_pressed(KeyCode::KeyQ) {
         input_state.item_in_hand = None;
