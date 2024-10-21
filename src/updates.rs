@@ -269,6 +269,7 @@ pub fn update_miners(
                     };
 
                     let item_type = match res_tile.resource_type {
+                        t if t == resources::COAL => items::COAL,
                         t if t == resources::IRON_ORE => items::IRON_ORE,
                         t if t == resources::COPPER_ORE => items::COPPER_ORE,
                         _ => unimplemented!(),

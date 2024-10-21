@@ -101,6 +101,7 @@ struct GameWorld {
 mod resources {
     use super::ResourceType;
 
+    pub static COAL: ResourceType = ResourceType::new("coal");
     pub static IRON_ORE: ResourceType = ResourceType::new("iron_ore");
     pub static COPPER_ORE: ResourceType = ResourceType::new("copper_ore");
 }
@@ -108,6 +109,7 @@ mod resources {
 mod items {
     use super::ItemType;
 
+    pub static COAL: ItemType = ItemType::new("coal");
     pub static IRON_ORE: ItemType = ItemType::new("iron_ore");
     pub static COPPER_ORE: ItemType = ItemType::new("copper_ore");
     pub static IRON_SHEET: ItemType = ItemType::new("iron_sheet");
@@ -246,9 +248,10 @@ fn setup_scene(
         let cx = rng.gen_range(-100..100);
         let cy = rng.gen_range(-100..100);
         
-        let res_type = match rng.gen_range(0..2) {
+        let res_type = match rng.gen_range(0..3) {
             0 => resources::IRON_ORE,
             1 => resources::COPPER_ORE,
+            2 => resources::COAL,
             _ => unreachable!(),
         };
         let num_tiles = rng.gen_range(5..40);

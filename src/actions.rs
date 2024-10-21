@@ -68,6 +68,7 @@ pub fn handle_player_actions(
                         {
                             let item = DroppedItem {
                                 item_type: match res.resource_type {
+                                    r if r == resources::COAL => items::COAL,
                                     r if r == resources::IRON_ORE => items::IRON_ORE,
                                     r if r == resources::COPPER_ORE => items::COPPER_ORE,
                                     _ => unreachable!(),
