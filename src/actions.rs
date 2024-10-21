@@ -58,12 +58,16 @@ pub fn handle_player_actions(
             {
                 game_world.tiles.remove(&(xx, yy));
                 commands.entity(entity).despawn();
-            } else if let Some((_, _)) = q_resource_tiles
+            } else if let Some((_, res)) = q_resource_tiles
                 .iter()
                 .find(|(_, t)| t.x == xx && t.y == yy)
             {
                 let item = DroppedItem {
-                    item_type: items::IRON_ORE,
+                    item_type: match res.resource_type {
+                        r if r == resources::IRON_ORE => items::IRON_ORE,
+                        r if r == resources::COPPER_ORE => items::COPPER_ORE,
+                        _ => unreachable!(),
+                    },
                 };
                 commands.spawn((
                     create_dropped_item_sprite(
@@ -119,14 +123,24 @@ pub fn handle_player_actions(
                                 };
                                 game_world.tiles.insert((xx, yy), tile.clone());
 
-                                commands.spawn((
-                                    create_tile_sprite(&asset_server, &tile),
-                                    tile,
-                                    ResourceProducer {
-                                        timer: Timer::from_seconds(1.0, TimerMode::Once),
-                                        resource: resources::IRON_ORE,
-                                    },
-                                ));
+                                if let Some((_, res)) = q_resource_tiles
+                                    .iter()
+                                    .find(|(_, t)| t.x == xx && t.y == yy)
+                                {
+                                    commands.spawn((
+                                        create_tile_sprite(&asset_server, &tile),
+                                        tile,
+                                        ResourceProducer {
+                                            timer: Timer::from_seconds(1.0, TimerMode::Once),
+                                            resource: res.resource_type,
+                                        }
+                                    ));
+                                } else {
+                                    commands.spawn((
+                                        create_tile_sprite(&asset_server, &tile),
+                                        tile,
+                                    ));
+                                }
                             }
                             i if i == items::INSERTER => {
                                 let tile = PlacedTile {

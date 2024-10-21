@@ -270,6 +270,7 @@ pub fn update_miners(
 
                     let item_type = match res_tile.resource_type {
                         t if t == resources::IRON_ORE => items::IRON_ORE,
+                        t if t == resources::COPPER_ORE => items::COPPER_ORE,
                         _ => unimplemented!(),
                     };
 
@@ -301,6 +302,7 @@ pub fn update_item_processors(mut q_processors: Query<&mut ItemProcessor>, time:
             if let Some(item_type) = processor.item {
                 if let Some(output_item_type) = match item_type {
                     t if t == items::IRON_ORE => Some(items::IRON_SHEET),
+                    t if t == items::COPPER_ORE => Some(items::COPPER_SHEET),
                     _ => None,
                 } {
                     let new_output = if let Some(output) = processor.output {

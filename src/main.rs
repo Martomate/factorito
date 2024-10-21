@@ -102,13 +102,16 @@ mod resources {
     use super::ResourceType;
 
     pub static IRON_ORE: ResourceType = ResourceType::new("iron_ore");
+    pub static COPPER_ORE: ResourceType = ResourceType::new("copper_ore");
 }
 
 mod items {
     use super::ItemType;
 
     pub static IRON_ORE: ItemType = ItemType::new("iron_ore");
+    pub static COPPER_ORE: ItemType = ItemType::new("copper_ore");
     pub static IRON_SHEET: ItemType = ItemType::new("iron_sheet");
+    pub static COPPER_SHEET: ItemType = ItemType::new("copper_sheet");
     pub static BELT: ItemType = ItemType::new("belt");
     pub static MINER: ItemType = ItemType::new("miner");
     pub static INSERTER: ItemType = ItemType::new("inserter");
@@ -242,6 +245,11 @@ fn setup_scene(
         let cx = rng.gen_range(-100..100);
         let cy = rng.gen_range(-100..100);
         
+        let res_type = match rng.gen_range(0..2) {
+            0 => resources::IRON_ORE,
+            1 => resources::COPPER_ORE,
+            _ => unreachable!(),
+        };
         let num_tiles = rng.gen_range(5..40);
 
         let mut taken: Vec<(i32, i32)> = Vec::new();
@@ -251,7 +259,7 @@ fn setup_scene(
         taken.push((x, y));
         
         let tile = ResourceTile {
-            resource_type: resources::IRON_ORE,
+            resource_type: res_type,
             x: cx + x,
             y: cy + y,
         };
@@ -275,7 +283,7 @@ fn setup_scene(
                         taken.push((x, y));
 
                         let tile = ResourceTile {
-                            resource_type: resources::IRON_ORE,
+                            resource_type: res_type,
                             x: cx + x,
                             y: cy + y,
                         };
