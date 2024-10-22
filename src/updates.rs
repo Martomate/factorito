@@ -202,10 +202,10 @@ pub fn update_movers(
         match mover.item {
             Some(item) => {
                 if rot.time == 1.0 {
-                    let pos = tr.transform_point(vec2(0.0, 1.0 * 32.0).extend(0.0));
+                    let pos = tr.transform_point(vec2(0.0, 0.5 * 32.0).extend(0.0));
                     if let Some((_, mut pr)) = q_processors
                         .iter_mut()
-                        .find(|(tr, _)| tr.translation.distance_squared(pos) < 16.0 * 16.0)
+                        .find(|(tr, _)| tr.translation.distance_squared(pos) < 24.0 * 24.0)
                     {
                         if pr.item.is_none() {
                             let from = rot.to;
@@ -221,6 +221,7 @@ pub fn update_movers(
                         .iter()
                         .map(|(_, tr, _)| tr.translation)
                         .any(|other| {
+                            let other = other - vec2(8.0, -8.0).extend(0.0);
                             let dist_after = (other.x - pos.x).abs().max((other.y - pos.y).abs());
                             dist_after < MIN_ITEM_DIST
                         })
@@ -234,12 +235,14 @@ pub fn update_movers(
                         let item = DroppedItem { item_type: item };
                         mover.item = None;
 
+                        let pos = pos + vec2(8.0, -8.0).extend(0.0);
+
                         commands.spawn((
                             create_dropped_item_sprite(
                                 &asset_server,
                                 &item,
-                                (pos.x + 8.0) / 32.0,
-                                (pos.y - 8.0) / 32.0,
+                                pos.x / 32.0,
+                                pos.y / 32.0,
                             ),
                             item,
                         ));
@@ -248,10 +251,10 @@ pub fn update_movers(
             }
             None => {
                 if rot.time == 1.0 {
-                    let pos = tr.transform_point(vec2(0.0, 1.0 * 32.0).extend(0.0));
+                    let pos = tr.transform_point(vec2(0.0, 0.4 * 32.0).extend(0.0));
                     const MIN_DIST: f32 = 0.5 * 32.0;
                     if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
-                        tr.translation.distance_squared(pos) < MIN_DIST * MIN_DIST
+                        (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos) < MIN_DIST * MIN_DIST
                     }) {
                         commands.entity(e).despawn_recursive();
 

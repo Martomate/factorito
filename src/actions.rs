@@ -3,7 +3,9 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 
 use crate::{
-    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources, tiles, ui, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor, PlacedTile, Player, ResourceProducer, ResourceTile, TileRotation
+    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources,
+    tiles, ui, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor, PlacedTile, Player,
+    ResourceProducer, ResourceTile, TileRotation,
 };
 
 pub fn handle_player_actions(
@@ -24,7 +26,11 @@ pub fn handle_player_actions(
             input_state.inventory_ui = None;
         } else {
             let player = q_player.single();
-            input_state.inventory_ui = Some(ui::create_player_inventory_ui(commands, &asset_server, player.inventory.as_ref()));
+            input_state.inventory_ui = Some(ui::create_player_inventory_ui(
+                commands,
+                &asset_server,
+                player.inventory.as_ref(),
+            ));
         }
         return;
     }
@@ -38,8 +44,8 @@ pub fn handle_player_actions(
 
     if let Some(pos) = mouse_pos {
         if input_state.dropping_items {
-            let xx = pos.x / 32.0;
-            let yy = pos.y / 32.0;
+            let xx = (pos.x + 8.0) / 32.0;
+            let yy = (pos.y - 8.0) / 32.0;
 
             let item = DroppedItem {
                 item_type: items::IRON_SHEET,
@@ -56,38 +62,44 @@ pub fn handle_player_actions(
                     if timer.tick(time.delta()).finished() {
                         let xx = (pos.x / 32.0 + 0.5).floor() as i32;
                         let yy = (pos.y / 32.0 + 0.5).floor() as i32;
-                        if let Some((entity, _)) = q_tiles
+                        let mut deleted = false;
+                        for (entity, _) in q_tiles
                             .iter()
-                            .find(|(_, tile)| tile.x == xx && tile.y == yy)
+                            .filter(|(_, tile)| tile.x == xx && tile.y == yy)
                         {
+                            deleted = true;
                             game_world.tiles.remove(&(xx, yy));
                             commands.entity(entity).despawn();
-                        } else if let Some((_, res)) = q_resource_tiles
-                            .iter()
-                            .find(|(_, t)| t.x == xx && t.y == yy)
-                        {
-                            let item = DroppedItem {
-                                item_type: match res.resource_type {
-                                    r if r == resources::COAL => items::COAL,
-                                    r if r == resources::IRON_ORE => items::IRON_ORE,
-                                    r if r == resources::COPPER_ORE => items::COPPER_ORE,
-                                    _ => unreachable!(),
-                                },
-                            };
-                            commands.spawn((
-                                create_dropped_item_sprite(
-                                    &asset_server,
-                                    &item,
-                                    (pos.x + 8.0) / 32.0,
-                                    (pos.y - 8.0) / 32.0,
-                                ),
-                                item,
-                            ));
+                        }
+                        if !deleted {
+                            if let Some((_, res)) = q_resource_tiles
+                                .iter()
+                                .find(|(_, t)| t.x == xx && t.y == yy)
+                            {
+                                let item = DroppedItem {
+                                    item_type: match res.resource_type {
+                                        r if r == resources::COAL => items::COAL,
+                                        r if r == resources::IRON_ORE => items::IRON_ORE,
+                                        r if r == resources::COPPER_ORE => items::COPPER_ORE,
+                                        _ => unreachable!(),
+                                    },
+                                };
+                                commands.spawn((
+                                    create_dropped_item_sprite(
+                                        &asset_server,
+                                        &item,
+                                        (pos.x + 8.0) / 32.0,
+                                        (pos.y - 8.0) / 32.0,
+                                    ),
+                                    item,
+                                ));
+                            }
                         }
                     }
                 }
                 None => {
-                    input_state.deleting_tile_timer = Some(Timer::from_seconds(1.0, TimerMode::Repeating));
+                    input_state.deleting_tile_timer =
+                        Some(Timer::from_seconds(0.5, TimerMode::Repeating));
                 }
             }
         } else {
@@ -146,13 +158,11 @@ pub fn handle_player_actions(
                                         ResourceProducer {
                                             timer: Timer::from_seconds(1.0, TimerMode::Once),
                                             resource: res.resource_type,
-                                        }
+                                        },
                                     ));
                                 } else {
-                                    commands.spawn((
-                                        create_tile_sprite(&asset_server, &tile),
-                                        tile,
-                                    ));
+                                    commands
+                                        .spawn((create_tile_sprite(&asset_server, &tile), tile));
                                 }
                             }
                             i if i == items::INSERTER => {
