@@ -87,7 +87,7 @@ pub fn update_rotating_tiles(
     }
 }
 
-const MIN_ITEM_DIST: f32 = 16.0;
+const MIN_ITEM_DIST: f32 = 14.0;
 
 pub fn update_tiles(
     q_tiles: Query<&PlacedTile>,
@@ -114,22 +114,72 @@ pub fn update_tiles(
                         3 => vec2(0.0, -1.0),
                         _ => unreachable!(),
                     };
-                    let new_pos = transform.translation + dir.extend(0.0);
-                    if !q_items
-                        .iter()
-                        .filter(|(e, _)| *e != entity)
-                        .map(|(_, tr)| tr.translation)
-                        .any(|other| {
-                            let dist_before = (other.x - item_pos.x)
-                                .abs()
-                                .max((other.y - item_pos.y).abs());
-                            let dist_after =
-                                (other.x - new_pos.x).abs().max((other.y - new_pos.y).abs());
-                            dist_after < MIN_ITEM_DIST && dist_after - dist_before < 1e-6
-                        })
-                    {
-                        item_movements.insert(entity, dir.extend(0.0));
+                    let mut new_pos = transform.translation + dir.extend(0.0);
+
+                    match tile.rotation {
+                        0 | 2 => {
+                            let mut dy = (new_pos.y + 8.0) % 32.0;
+                            if dy < 0.0 {
+                                dy += 32.0;
+                            }
+                            let dy = if dy < 8.0 {
+                                (8.0 - dy).min(1.0)
+                            } else if dy < 16.0 {
+                                -(dy - 8.0).min(1.0)
+                            } else if dy < 24.0 {
+                                (24.0 - dy).min(1.0)
+                            } else {
+                                -(dy - 24.0).min(1.0)
+                            };
+                            new_pos.y += dy;
+                        }
+                        1 | 3 => {
+                            let mut dx = (new_pos.x + 8.0) % 32.0;
+                            if dx < 0.0 {
+                                dx += 32.0;
+                            }
+                            let dx = if dx < 8.0 {
+                                (8.0 - dx).min(1.0)
+                            } else if dx < 16.0 {
+                                -(dx - 8.0).min(1.0)
+                            } else if dx < 24.0 {
+                                (24.0 - dx).min(1.0)
+                            } else {
+                                -(dx - 24.0).min(1.0)
+                            };
+                            new_pos.x += dx;
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    let mut total_movement = vec2(0.0, 0.0);
+                    for v in 0..2 {
+                        let movement = if v == 0 {
+                            vec2(new_pos.x - transform.translation.x, 0.0)
+                        } else {
+                            vec2(0.0, new_pos.y - transform.translation.y)
+                        };
+                        let new_pos = transform.translation + movement.extend(0.0);
+                        if q_items
+                            .iter()
+                            .filter(|(e, _)| *e != entity)
+                            .map(|(_, tr)| tr.translation)
+                            .all(|other| {
+                                let dist_x_before = (other.x - item_pos.x).abs();
+                                let dist_y_before = (other.y - item_pos.y).abs();
+                                let dist_before = dist_x_before.max(dist_y_before);
+
+                                let dist_x_after = (other.x - new_pos.x).abs();
+                                let dist_y_after = (other.y - new_pos.y).abs();
+                                let dist_after = dist_x_after.max(dist_y_after);
+
+                                dist_after > MIN_ITEM_DIST || dist_after > dist_before - 1e-6
+                            })
+                        {
+                            total_movement += movement;
+                        }
                     }
+                    item_movements.insert(entity, total_movement.extend(0.0));
                 }
             }
             for (entity, mut transform) in q_items.iter_mut() {
