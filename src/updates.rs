@@ -238,7 +238,7 @@ pub fn update_movers(
                             create_dropped_item_sprite(
                                 &asset_server,
                                 &item,
-                                (pos.x - 8.0) / 32.0,
+                                (pos.x + 8.0) / 32.0,
                                 (pos.y - 8.0) / 32.0,
                             ),
                             item,
@@ -248,8 +248,7 @@ pub fn update_movers(
             }
             None => {
                 if rot.time == 1.0 {
-                    let pos = tr.transform_point(vec2(0.0, 0.0 * 32.0).extend(0.0))
-                        - vec2(8.0, 8.0).extend(0.0);
+                    let pos = tr.transform_point(vec2(0.0, 1.0 * 32.0).extend(0.0));
                     const MIN_DIST: f32 = 0.5 * 32.0;
                     if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
                         tr.translation.distance_squared(pos) < MIN_DIST * MIN_DIST
