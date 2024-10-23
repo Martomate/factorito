@@ -45,7 +45,7 @@ pub fn hanle_player_inventory_ui_events(
             }
         }
     }
-    
+
     for (item, mut bg, interaction) in q_craftable_item_int.iter_mut() {
         match interaction {
             Interaction::Pressed => {
@@ -145,14 +145,18 @@ pub fn create_player_inventory_ui(
                                                                 style: Style {
                                                                     width: Val::Percent(100.0),
                                                                     height: Val::Percent(100.0),
-                                                                    justify_content: JustifyContent::End,
+                                                                    justify_content:
+                                                                        JustifyContent::End,
                                                                     align_items: AlignItems::End,
                                                                     ..default()
                                                                 },
                                                                 ..default()
                                                             })
                                                             .with_children(|parent| {
-                                                                create_outlined_text(parent, format!("{}", count));
+                                                                create_outlined_text(
+                                                                    parent,
+                                                                    format!("{}", count),
+                                                                );
                                                             });
                                                     });
                                             } else {
@@ -224,15 +228,17 @@ pub fn create_player_inventory_ui(
                                             flex_grow: 1.0,
                                             ..default()
                                         },
-                                        background_color: BackgroundColor(if is_selected { COLOR_ITEM_BG_HOVER } else { COLOR_ITEM_BG_NORMAL }),
+                                        background_color: BackgroundColor(if is_selected {
+                                            COLOR_ITEM_BG_HOVER
+                                        } else {
+                                            COLOR_ITEM_BG_NORMAL
+                                        }),
                                         ..default()
                                     },))
                                     .with_children(|parent| {
                                         parent
                                             .spawn((NodeBundle {
-                                                style: Style {
-                                                    ..default()
-                                                },
+                                                style: Style { ..default() },
                                                 ..default()
                                             },))
                                             .with_children(|parent| {
@@ -248,7 +254,10 @@ pub fn create_player_inventory_ui(
                                                         ..default()
                                                     })
                                                     .with_children(|parent| {
-                                                        create_outlined_text(parent, category_label.to_string());
+                                                        create_outlined_text(
+                                                            parent,
+                                                            category_label.to_string(),
+                                                        );
                                                     });
                                             });
                                     });
@@ -330,50 +339,49 @@ pub fn create_player_inventory_ui(
 }
 
 fn create_outlined_text(parent: &mut ChildBuilder<'_>, text_str: String) {
-    parent.spawn(NodeBundle {
-        style: Style {
+    parent
+        .spawn(NodeBundle {
+            style: Style { ..default() },
             ..default()
-        },
-        ..default()
-    }).with_children(|parent| {
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                if dx == 0 && dy == 0 {
-                    continue;
+        })
+        .with_children(|parent| {
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    parent.spawn(
+                        TextBundle::from_section(
+                            text_str.clone(),
+                            TextStyle {
+                                color: Color::hsv(0.0, 0.0, 0.0),
+                                font_size: 14.0,
+                                ..default()
+                            },
+                        )
+                        .with_style(Style {
+                            position_type: PositionType::Absolute,
+                            right: Val::Px((dx + 1) as f32),
+                            bottom: Val::Px((dy + 1) as f32),
+                            ..default()
+                        }),
+                    );
                 }
-                parent.spawn(TextBundle::from_section(
-                    text_str.clone(),
+            }
+            parent.spawn(TextBundle {
+                style: Style {
+                    margin: UiRect::right(Val::Px(1.0)).with_bottom(Val::Px(1.0)),
+                    ..default()
+                },
+                text: Text::from_section(
+                    text_str,
                     TextStyle {
-                        color: Color::hsv(
-                            0.0, 0.0, 0.0,
-                        ),
+                        color: Color::hsv(0.0, 0.0, 0.8),
                         font_size: 14.0,
                         ..default()
                     },
-                ).with_style(Style {
-                    position_type: PositionType::Absolute,
-                    right: Val::Px((dx + 1) as f32),
-                    bottom: Val::Px((dy + 1) as f32),
-                    ..default()
-                }));
-            }
-        }
-        parent.spawn(TextBundle {
-            style: Style {
-                margin: UiRect::right(Val::Px(1.0)).with_bottom(Val::Px(1.0)),
+                ),
                 ..default()
-            },
-            text: Text::from_section(
-                text_str,
-                TextStyle {
-                    color: Color::hsv(
-                        0.0, 0.0, 0.8,
-                    ),
-                    font_size: 14.0,
-                    ..default()
-                },
-            ),
-            ..default()
+            });
         });
-    });
 }

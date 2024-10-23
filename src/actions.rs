@@ -3,8 +3,8 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 
 use crate::{
-    items, resources, sprites, tiles, ui, DroppedItem, GameWorld, InputState, ItemMover,
-    ItemProcessor, PlacedTile, Player, ResourceProducer, ResourceTile, TileRotation,
+    items, sprites, tiles, ui, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor,
+    PlacedTile, Player, ResourceProducer, ResourceTile, TileRotation,
 };
 
 pub fn handle_player_actions(
@@ -97,7 +97,8 @@ pub fn handle_player_actions(
 
             if perform_action {
                 if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
-                    (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos.extend(0.0)) < 16.0 * 16.0
+                    (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos.extend(0.0))
+                        < 16.0 * 16.0
                 }) {
                     if player.increment_inventory(it.item_type) {
                         commands.entity(e).despawn_recursive();
@@ -115,12 +116,15 @@ pub fn handle_player_actions(
                         let xx = (pos.x / 32.0 + 0.5).floor() as i32;
                         let yy = (pos.y / 32.0 + 0.5).floor() as i32;
                         let mut deleted = false;
-                        for (entity, _) in q_tiles
+                        for (entity, tile) in q_tiles
                             .iter()
                             .filter(|(_, tile)| tile.x == xx && tile.y == yy)
                         {
                             deleted = true;
-                            game_world.tiles.remove(&(xx, yy));
+                            if game_world.tiles.remove(&(xx, yy)).is_some() {
+                                // TODO: check return value when we don't need a loop to avoid multiple items (for inserters)
+                                player.increment_inventory(tile.tile_type.item_to_drop);
+                            }
                             commands.entity(entity).despawn();
                         }
                         if !deleted {
@@ -129,12 +133,7 @@ pub fn handle_player_actions(
                                 .find(|(_, t)| t.x == xx && t.y == yy)
                             {
                                 let item = DroppedItem {
-                                    item_type: match res.resource_type {
-                                        r if r == resources::COAL => items::COAL,
-                                        r if r == resources::IRON_ORE => items::IRON_ORE,
-                                        r if r == resources::COPPER_ORE => items::COPPER_ORE,
-                                        _ => unreachable!(),
-                                    },
+                                    item_type: res.resource_type.item_to_produce,
                                 };
                                 commands.spawn((
                                     sprites::create_dropped_item_sprite(
@@ -187,12 +186,14 @@ pub fn handle_player_actions(
                                     x: xx,
                                     y: yy,
                                 };
-                                game_world.tiles.insert((xx, yy), tile.clone());
+                                if player.decrement_inventory(tile.tile_type.item_to_drop) {
+                                    game_world.tiles.insert((xx, yy), tile.clone());
 
-                                commands.spawn((
-                                    sprites::create_tile_sprite(&asset_server, &tile),
-                                    tile,
-                                ));
+                                    commands.spawn((
+                                        sprites::create_tile_sprite(&asset_server, &tile),
+                                        tile,
+                                    ));
+                                }
                             }
                             i if i == items::MINER => {
                                 let tile = PlacedTile {
@@ -201,25 +202,28 @@ pub fn handle_player_actions(
                                     x: xx,
                                     y: yy,
                                 };
-                                game_world.tiles.insert((xx, yy), tile.clone());
 
-                                if let Some((_, res)) = q_resource_tiles
-                                    .iter()
-                                    .find(|(_, t)| t.x == xx && t.y == yy)
-                                {
-                                    commands.spawn((
-                                        sprites::create_tile_sprite(&asset_server, &tile),
-                                        tile,
-                                        ResourceProducer {
-                                            timer: Timer::from_seconds(1.0, TimerMode::Once),
-                                            resource: res.resource_type,
-                                        },
-                                    ));
-                                } else {
-                                    commands.spawn((
-                                        sprites::create_tile_sprite(&asset_server, &tile),
-                                        tile,
-                                    ));
+                                if player.decrement_inventory(tile.tile_type.item_to_drop) {
+                                    game_world.tiles.insert((xx, yy), tile.clone());
+
+                                    if let Some((_, res)) = q_resource_tiles
+                                        .iter()
+                                        .find(|(_, t)| t.x == xx && t.y == yy)
+                                    {
+                                        commands.spawn((
+                                            sprites::create_tile_sprite(&asset_server, &tile),
+                                            tile,
+                                            ResourceProducer {
+                                                timer: Timer::from_seconds(1.0, TimerMode::Once),
+                                                resource: res.resource_type,
+                                            },
+                                        ));
+                                    } else {
+                                        commands.spawn((
+                                            sprites::create_tile_sprite(&asset_server, &tile),
+                                            tile,
+                                        ));
+                                    }
                                 }
                             }
                             i if i == items::INSERTER => {
@@ -229,31 +233,35 @@ pub fn handle_player_actions(
                                     x: xx,
                                     y: yy,
                                 };
-                                game_world.tiles.insert((xx, yy), tile.clone());
 
-                                let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
+                                if player.decrement_inventory(tile.tile_type.item_to_drop) {
+                                    game_world.tiles.insert((xx, yy), tile.clone());
 
-                                let main_sprite = sprites::create_tile_sprite(&asset_server, &tile);
-                                let rotating_sprite = sprites::create_rotating_tile_sprite(
-                                    &asset_server,
-                                    &tile,
-                                    anchor,
-                                    PI * 0.5,
-                                );
+                                    let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
 
-                                commands.spawn((tile.clone(), main_sprite));
-                                commands.spawn((
-                                    tile,
-                                    rotating_sprite,
-                                    TileRotation {
+                                    let main_sprite =
+                                        sprites::create_tile_sprite(&asset_server, &tile);
+                                    let rotating_sprite = sprites::create_rotating_tile_sprite(
+                                        &asset_server,
+                                        &tile,
                                         anchor,
-                                        speed: 2.0,
-                                        from: -PI * 0.5,
-                                        to: PI * 0.5,
-                                        time: 1.0,
-                                    },
-                                    ItemMover { item: None },
-                                ));
+                                        PI * 0.5,
+                                    );
+
+                                    commands.spawn((tile.clone(), main_sprite));
+                                    commands.spawn((
+                                        tile,
+                                        rotating_sprite,
+                                        TileRotation {
+                                            anchor,
+                                            speed: 2.0,
+                                            from: -PI * 0.5,
+                                            to: PI * 0.5,
+                                            time: 1.0,
+                                        },
+                                        ItemMover { item: None },
+                                    ));
+                                }
                             }
                             i if i == items::FURNACE => {
                                 let tile = PlacedTile {
@@ -262,17 +270,20 @@ pub fn handle_player_actions(
                                     x: xx,
                                     y: yy,
                                 };
-                                game_world.tiles.insert((xx, yy), tile.clone());
 
-                                commands.spawn((
-                                    sprites::create_tile_sprite(&asset_server, &tile),
-                                    ItemProcessor {
-                                        timer: Timer::from_seconds(3.0, TimerMode::Once),
-                                        item: None,
-                                        output: None,
-                                    },
-                                    tile,
-                                ));
+                                if player.decrement_inventory(tile.tile_type.item_to_drop) {
+                                    game_world.tiles.insert((xx, yy), tile.clone());
+
+                                    commands.spawn((
+                                        sprites::create_tile_sprite(&asset_server, &tile),
+                                        ItemProcessor {
+                                            timer: Timer::from_seconds(3.0, TimerMode::Once),
+                                            item: None,
+                                            output: None,
+                                        },
+                                        tile,
+                                    ));
+                                }
                             }
                             _ => {}
                         };

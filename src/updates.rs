@@ -3,8 +3,8 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, utils::HashMap, window::PrimaryWindow};
 
 use crate::{
-    calc_rotating_tile_transform, items, resources, sprites, tiles, DroppedItem, GameWorld,
-    InputState, ItemMover, ItemProcessor, PlacedTile, PreviewTile, ResourceProducer, ResourceTile,
+    calc_rotating_tile_transform, items, sprites, tiles, DroppedItem, GameWorld, InputState,
+    ItemMover, ItemProcessor, PlacedTile, PreviewTile, ResourceProducer, ResourceTile,
     TileRotation,
 };
 
@@ -257,7 +257,7 @@ pub fn update_movers(
             None => {
                 if rot.time == 1.0 {
                     let pos = tr.transform_point(vec2(0.0, 0.4 * 32.0).extend(0.0));
-                    const MIN_DIST: f32 = 0.5 * 32.0;
+                    const MIN_DIST: f32 = 0.75 * 32.0;
                     if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
                         (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos)
                             < MIN_DIST * MIN_DIST
@@ -326,12 +326,7 @@ pub fn update_miners(
                         _ => unreachable!(),
                     };
 
-                    let item_type = match res_tile.resource_type {
-                        t if t == resources::COAL => items::COAL,
-                        t if t == resources::IRON_ORE => items::IRON_ORE,
-                        t if t == resources::COPPER_ORE => items::COPPER_ORE,
-                        _ => unimplemented!(),
-                    };
+                    let item_type = res_tile.resource_type.item_to_produce;
 
                     let item = DroppedItem { item_type };
                     let pos = vec2(

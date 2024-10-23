@@ -4,8 +4,8 @@ mod sprites;
 mod ui;
 mod updates;
 
-use bevy_prng::ChaCha8Rng;
 use bevy::{math::vec3, prelude::*, sprite::MaterialMesh2dBundle, utils::HashMap};
+use bevy_prng::ChaCha8Rng;
 use bevy_rand::{plugin::EntropyPlugin, prelude::GlobalEntropy};
 use rand::Rng;
 use std::f32::consts::PI;
@@ -14,14 +14,18 @@ use sprites::*;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Factorito".to_string(),
-                canvas: Some("#app".to_string()),
-                ..default()
-            }),
-            ..default()
-        }).set(ImagePlugin::default_nearest())) // prevents blurry sprites
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Factorito".to_string(),
+                        canvas: Some("#app".to_string()),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(ImagePlugin::default_nearest()),
+        ) // prevents blurry sprites
         .add_plugins(EntropyPlugin::<ChaCha8Rng>::default())
         .insert_resource(InputState::default())
         .insert_resource(GameWorld::default())
@@ -52,11 +56,15 @@ fn main() {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 struct ResourceType {
     texture_name: &'static str,
+    item_to_produce: ItemType,
 }
 
 impl ResourceType {
-    const fn new(texture_name: &'static str) -> Self {
-        Self { texture_name }
+    const fn new(texture_name: &'static str, item_to_produce: ItemType) -> Self {
+        Self {
+            texture_name,
+            item_to_produce,
+        }
     }
 }
 
@@ -75,13 +83,15 @@ impl ItemType {
 struct TileType {
     texture_name: &'static str,
     rotating_texture_name: Option<&'static str>,
+    item_to_drop: ItemType,
 }
 
 impl TileType {
-    const fn new(texture_name: &'static str) -> Self {
+    const fn new(texture_name: &'static str, item_to_drop: ItemType) -> Self {
         Self {
             texture_name,
             rotating_texture_name: None,
+            item_to_drop,
         }
     }
 
@@ -98,13 +108,11 @@ struct GameWorld {
     tiles: HashMap<(i32, i32), PlacedTile>,
 }
 
-mod resources {
-    use super::ResourceType;
-
-    pub static COAL: ResourceType = ResourceType::new("coal");
-    pub static IRON_ORE: ResourceType = ResourceType::new("iron_ore");
-    pub static COPPER_ORE: ResourceType = ResourceType::new("copper_ore");
-}
+static RESOURCE_TYPES: [ResourceType; 3] = [
+    ResourceType::new("coal", items::COAL),
+    ResourceType::new("iron_ore", items::IRON_ORE),
+    ResourceType::new("copper_ore", items::COPPER_ORE),
+];
 
 mod items {
     use super::ItemType;
@@ -121,13 +129,15 @@ mod items {
 }
 
 mod tiles {
+    use crate::items;
+
     use super::TileType;
 
-    pub static BELT: TileType = TileType::new("belt");
-    pub static MINER: TileType = TileType::new("miner");
+    pub static BELT: TileType = TileType::new("belt", items::BELT);
+    pub static MINER: TileType = TileType::new("miner", items::MINER);
     pub static INSERTER: TileType =
-        TileType::new("inserter_base").with_rotating_part("inserter_hand");
-    pub static FURNACE: TileType = TileType::new("furnace");
+        TileType::new("inserter_base", items::INSERTER).with_rotating_part("inserter_hand");
+    pub static FURNACE: TileType = TileType::new("furnace", items::FURNACE);
 }
 
 const PLAYER_SPEED: f32 = 200.;
@@ -183,11 +193,17 @@ struct Player {
 
 impl Player {
     pub fn has_item_in_inventory(&mut self, item_type: ItemType) -> bool {
-        self.inventory.iter().any(|(t, c)| *t == item_type && *c > 0)
+        self.inventory
+            .iter()
+            .any(|(t, c)| *t == item_type && *c > 0)
     }
 
     pub fn decrement_inventory(&mut self, item_type: ItemType) -> bool {
-        let res = if let Some((_, c)) = self.inventory.iter_mut().find(|(t, c)| *t == item_type && *c > 0) {
+        let res = if let Some((_, c)) = self
+            .inventory
+            .iter_mut()
+            .find(|(t, c)| *t == item_type && *c > 0)
+        {
             *c -= 1;
             true
         } else {
@@ -196,7 +212,7 @@ impl Player {
         self.inventory.retain(|(_, c)| *c > 0);
         res
     }
-    
+
     pub fn increment_inventory(&mut self, item_type: ItemType) -> bool {
         if let Some((_, c)) = self.inventory.iter_mut().find(|(t, _)| *t == item_type) {
             *c += 1;
@@ -254,7 +270,7 @@ fn setup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
-    mut rng: ResMut<GlobalEntropy<ChaCha8Rng>>
+    mut rng: ResMut<GlobalEntropy<ChaCha8Rng>>,
 ) {
     let dirt_texture = asset_server.load("textures/bg/dirt.png");
 
@@ -277,13 +293,8 @@ fn setup_scene(
     for _ in 0..100 {
         let cx = rng.gen_range(-100..100);
         let cy = rng.gen_range(-100..100);
-        
-        let res_type = match rng.gen_range(0..3) {
-            0 => resources::IRON_ORE,
-            1 => resources::COPPER_ORE,
-            2 => resources::COAL,
-            _ => unreachable!(),
-        };
+
+        let res_type = RESOURCE_TYPES[rng.gen_range(0..3)];
         let num_tiles = rng.gen_range(5..40);
 
         let mut taken: Vec<(i32, i32)> = Vec::new();
@@ -291,7 +302,7 @@ fn setup_scene(
         let x = 0;
         let y = 0;
         taken.push((x, y));
-        
+
         let tile = ResourceTile {
             resource_type: res_type,
             x: cx + x,
@@ -331,12 +342,14 @@ fn setup_scene(
     }
 
     commands.spawn((
-        Player { inventory: vec![
-            (items::BELT, 100),
-            (items::INSERTER, 50),
-            (items::FURNACE, 10),
-            (items::MINER, 20),
-        ] },
+        Player {
+            inventory: vec![
+                (items::BELT, 100),
+                (items::INSERTER, 50),
+                (items::FURNACE, 10),
+                (items::MINER, 20),
+            ],
+        },
         MaterialMesh2dBundle {
             mesh: meshes.add(Circle::new(5.)).into(),
             material: materials.add(Color::srgb(1.0, 1.0, 1.0)),
