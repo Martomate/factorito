@@ -3,9 +3,8 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, window::PrimaryWindow};
 
 use crate::{
-    create_dropped_item_sprite, create_rotating_tile_sprite, create_tile_sprite, items, resources,
-    tiles, ui, DroppedItem, GameWorld, InputState, ItemMover, ItemProcessor, PlacedTile, Player,
-    ResourceProducer, ResourceTile, TileRotation,
+    items, resources, sprites, tiles, ui, DroppedItem, GameWorld, InputState, ItemMover,
+    ItemProcessor, PlacedTile, Player, ResourceProducer, ResourceTile, TileRotation,
 };
 
 pub fn handle_player_actions(
@@ -51,7 +50,7 @@ pub fn handle_player_actions(
                 item_type: items::IRON_SHEET,
             };
             commands.spawn((
-                create_dropped_item_sprite(&asset_server, &item, xx, yy),
+                sprites::create_dropped_item_sprite(&asset_server, &item, xx, yy),
                 item,
             ));
         }
@@ -85,7 +84,7 @@ pub fn handle_player_actions(
                                     },
                                 };
                                 commands.spawn((
-                                    create_dropped_item_sprite(
+                                    sprites::create_dropped_item_sprite(
                                         &asset_server,
                                         &item,
                                         (pos.x + 8.0) / 32.0,
@@ -137,7 +136,10 @@ pub fn handle_player_actions(
                                 };
                                 game_world.tiles.insert((xx, yy), tile.clone());
 
-                                commands.spawn((create_tile_sprite(&asset_server, &tile), tile));
+                                commands.spawn((
+                                    sprites::create_tile_sprite(&asset_server, &tile),
+                                    tile,
+                                ));
                             }
                             i if i == items::MINER => {
                                 let tile = PlacedTile {
@@ -153,7 +155,7 @@ pub fn handle_player_actions(
                                     .find(|(_, t)| t.x == xx && t.y == yy)
                                 {
                                     commands.spawn((
-                                        create_tile_sprite(&asset_server, &tile),
+                                        sprites::create_tile_sprite(&asset_server, &tile),
                                         tile,
                                         ResourceProducer {
                                             timer: Timer::from_seconds(1.0, TimerMode::Once),
@@ -161,8 +163,10 @@ pub fn handle_player_actions(
                                         },
                                     ));
                                 } else {
-                                    commands
-                                        .spawn((create_tile_sprite(&asset_server, &tile), tile));
+                                    commands.spawn((
+                                        sprites::create_tile_sprite(&asset_server, &tile),
+                                        tile,
+                                    ));
                                 }
                             }
                             i if i == items::INSERTER => {
@@ -176,8 +180,8 @@ pub fn handle_player_actions(
 
                                 let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
 
-                                let main_sprite = create_tile_sprite(&asset_server, &tile);
-                                let rotating_sprite = create_rotating_tile_sprite(
+                                let main_sprite = sprites::create_tile_sprite(&asset_server, &tile);
+                                let rotating_sprite = sprites::create_rotating_tile_sprite(
                                     &asset_server,
                                     &tile,
                                     anchor,
@@ -208,7 +212,7 @@ pub fn handle_player_actions(
                                 game_world.tiles.insert((xx, yy), tile.clone());
 
                                 commands.spawn((
-                                    create_tile_sprite(&asset_server, &tile),
+                                    sprites::create_tile_sprite(&asset_server, &tile),
                                     ItemProcessor {
                                         timer: Timer::from_seconds(3.0, TimerMode::Once),
                                         item: None,

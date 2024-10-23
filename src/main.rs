@@ -302,9 +302,10 @@ fn setup_scene(
 
     commands.spawn((
         Player { inventory: vec![
-            (items::FURNACE, 10),
             (items::BELT, 100),
-            (items::IRON_SHEET, 50),
+            (items::INSERTER, 50),
+            (items::FURNACE, 10),
+            (items::MINER, 20),
         ] },
         MaterialMesh2dBundle {
             mesh: meshes.add(Circle::new(5.)).into(),

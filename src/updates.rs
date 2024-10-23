@@ -3,9 +3,8 @@ use std::f32::consts::PI;
 use bevy::{math::vec2, prelude::*, utils::HashMap, window::PrimaryWindow};
 
 use crate::{
-    calc_rotating_tile_transform, create_dropped_item_sprite, create_preview_sprite,
-    create_rotating_preview_sprite, items, resources, tiles, DroppedItem, GameWorld, InputState,
-    ItemMover, ItemProcessor, PlacedTile, PreviewTile, ResourceProducer, ResourceTile,
+    calc_rotating_tile_transform, items, resources, sprites, tiles, DroppedItem, GameWorld,
+    InputState, ItemMover, ItemProcessor, PlacedTile, PreviewTile, ResourceProducer, ResourceTile,
     TileRotation,
 };
 
@@ -50,13 +49,19 @@ pub fn update_preview_tile(
 
                 if !game_world.tiles.contains_key(&(x, y)) {
                     commands.spawn((
-                        create_preview_sprite(&asset_server, tile_type, x, y, input_state.rotation),
+                        sprites::create_preview_sprite(
+                            &asset_server,
+                            tile_type,
+                            x,
+                            y,
+                            input_state.rotation,
+                        ),
                         PreviewTile,
                     ));
                     if tile_type.rotating_texture_name.is_some() {
                         let anchor = vec2(0.0, -0.5 + 3.0 / 32.0);
                         commands.spawn((
-                            create_rotating_preview_sprite(
+                            sprites::create_rotating_preview_sprite(
                                 &asset_server,
                                 tile_type,
                                 x,
@@ -238,7 +243,7 @@ pub fn update_movers(
                         let pos = pos + vec2(8.0, -8.0).extend(0.0);
 
                         commands.spawn((
-                            create_dropped_item_sprite(
+                            sprites::create_dropped_item_sprite(
                                 &asset_server,
                                 &item,
                                 pos.x / 32.0,
@@ -254,7 +259,8 @@ pub fn update_movers(
                     let pos = tr.transform_point(vec2(0.0, 0.4 * 32.0).extend(0.0));
                     const MIN_DIST: f32 = 0.5 * 32.0;
                     if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
-                        (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos) < MIN_DIST * MIN_DIST
+                        (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos)
+                            < MIN_DIST * MIN_DIST
                     }) {
                         commands.entity(e).despawn_recursive();
 
@@ -339,7 +345,7 @@ pub fn update_miners(
                         dist_after < MIN_ITEM_DIST
                     }) {
                         commands.spawn((
-                            create_dropped_item_sprite(&asset_server, &item, pos.x, pos.y),
+                            sprites::create_dropped_item_sprite(&asset_server, &item, pos.x, pos.y),
                             item,
                         ));
                     }

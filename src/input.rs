@@ -90,7 +90,7 @@ pub fn move_player(
     input_state.dropping_items = kb_input.pressed(KeyCode::KeyZ);
 
     if kb_input.just_pressed(KeyCode::KeyR) {
-        input_state.rotation += 1;
+        input_state.rotation += 3;
         input_state.rotation %= 4;
     }
 
