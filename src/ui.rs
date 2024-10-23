@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use crate::{InputState, ItemType, Player};
+use crate::{items, InputState, ItemType, Player};
 
 const COLOR_ITEM_BORDER: Color = Color::hsv(0.0, 0.0, 0.2);
-const COLOR_ITEM_BG_NORMAL: Color = Color::hsv(0.0, 0.0, 0.25);
-const COLOR_ITEM_BG_HOVER: Color = Color::hsv(0.0, 0.0, 0.35);
+const COLOR_ITEM_BG_NORMAL: Color = Color::hsv(0.0, 0.0, 0.3);
+const COLOR_ITEM_BG_HOVER: Color = Color::hsv(0.0, 0.0, 0.4);
 
 #[derive(Component)]
 pub struct InventoryItem {
@@ -13,12 +13,12 @@ pub struct InventoryItem {
 
 #[derive(Component)]
 pub struct CraftableItem {
-    idx: usize,
+    item_type: Option<ItemType>,
 }
 
 pub fn hanle_player_inventory_ui_events(
     mut input_state: ResMut<InputState>,
-    q_player: Query<&Player>,
+    mut q_player: Query<&mut Player>,
     mut q_inventory_item_int: Query<
         (&InventoryItem, &mut BackgroundColor, &Interaction),
         Changed<Interaction>,
@@ -49,7 +49,37 @@ pub fn hanle_player_inventory_ui_events(
     for (item, mut bg, interaction) in q_craftable_item_int.iter_mut() {
         match interaction {
             Interaction::Pressed => {
-                println!("Crafting slot {} clicked", item.idx)
+                let mut player = q_player.single_mut();
+                if let Some(item_type) = item.item_type {
+                    match item_type {
+                        i if i == items::BELT => {
+                            if player.has_item_in_inventory(items::IRON_SHEET) {
+                                player.decrement_inventory(items::IRON_SHEET);
+                                player.increment_inventory(items::BELT);
+                            }
+                        }
+                        i if i == items::INSERTER => {
+                            if player.has_item_in_inventory(items::IRON_SHEET) && player.has_item_in_inventory(items::COPPER_SHEET) {
+                                player.decrement_inventory(items::IRON_SHEET);
+                                player.decrement_inventory(items::COPPER_SHEET);
+                                player.increment_inventory(items::INSERTER);
+                            }
+                        }
+                        i if i == items::FURNACE => {
+                            if player.has_item_in_inventory(items::IRON_SHEET) {
+                                player.decrement_inventory(items::IRON_SHEET);
+                                player.increment_inventory(items::FURNACE);
+                            }
+                        }
+                        i if i == items::MINER => {
+                            if player.has_item_in_inventory(items::IRON_SHEET) {
+                                player.decrement_inventory(items::IRON_SHEET);
+                                player.increment_inventory(items::MINER);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             Interaction::Hovered => {
                 bg.0 = COLOR_ITEM_BG_HOVER;
@@ -275,14 +305,14 @@ pub fn create_player_inventory_ui(
                                 ..default()
                             })
                             .with_children(|parent| {
-                                // A `NodeBundle` is used to display the logo the image as an `ImageBundle` can't automatically
-                                // size itself with a child node present.
                                 for x in 0..10 {
                                     let idx = y * 10 + x;
-                                    let inv = if idx < inventory.len() {
-                                        Some(inventory[idx])
-                                    } else {
-                                        None
+                                    let item_type = match (x, y) {
+                                        (0, 0) => Some(items::BELT),
+                                        (0, 1) => Some(items::INSERTER),
+                                        (0, 2) => Some(items::FURNACE),
+                                        (0, 3) => Some(items::MINER),
+                                        _ => None,
                                     };
                                     parent
                                         .spawn((
@@ -297,10 +327,10 @@ pub fn create_player_inventory_ui(
                                                 ),
                                                 ..default()
                                             },
-                                            CraftableItem { idx },
+                                            CraftableItem { item_type },
                                         ))
                                         .with_children(|parent| {
-                                            if let Some((item_type, _count)) = inv {
+                                            if let Some(item_type) = item_type {
                                                 parent.spawn((
                                                     NodeBundle {
                                                         style: Style {
