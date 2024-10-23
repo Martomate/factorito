@@ -1,6 +1,6 @@
 use bevy::{prelude::*, window::PrimaryWindow};
 
-use crate::{items, InputState, Player, PLAYER_SPEED};
+use crate::{InputState, Player, PLAYER_SPEED};
 
 pub fn update_camera(
     mut camera: Query<&mut Transform, (With<Camera2d>, Without<Player>)>,

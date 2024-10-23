@@ -136,7 +136,9 @@ const PLAYER_SPEED: f32 = 200.;
 struct InputState {
     drag_start: Option<Vec2>,
     dropping_items: bool,
+    dropping_items_timer: Option<Timer>,
     picking_items: bool,
+    picking_items_timer: Option<Timer>,
     deleting_tile: bool,
     deleting_tile_timer: Option<Timer>,
     rotation: u8,
@@ -177,6 +179,33 @@ impl Layer {
 #[derive(Component)]
 struct Player {
     inventory: Vec<(ItemType, usize)>,
+}
+
+impl Player {
+    pub fn has_item_in_inventory(&mut self, item_type: ItemType) -> bool {
+        self.inventory.iter().any(|(t, c)| *t == item_type && *c > 0)
+    }
+
+    pub fn decrement_inventory(&mut self, item_type: ItemType) -> bool {
+        let res = if let Some((_, c)) = self.inventory.iter_mut().find(|(t, c)| *t == item_type && *c > 0) {
+            *c -= 1;
+            true
+        } else {
+            false
+        };
+        self.inventory.retain(|(_, c)| *c > 0);
+        res
+    }
+    
+    pub fn increment_inventory(&mut self, item_type: ItemType) -> bool {
+        if let Some((_, c)) = self.inventory.iter_mut().find(|(t, _)| *t == item_type) {
+            *c += 1;
+            true
+        } else {
+            self.inventory.push((item_type, 1));
+            true
+        }
+    }
 }
 
 #[derive(Component)]

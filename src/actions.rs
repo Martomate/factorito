@@ -20,12 +20,13 @@ pub fn handle_player_actions(
     q_resource_tiles: Query<(Entity, &ResourceTile)>,
     time: Res<Time>,
 ) {
+    let mut player = q_player.single_mut();
+
     if input_state.toggling_inventory_visible {
         if let Some(e) = input_state.inventory_ui {
             commands.entity(e).despawn_recursive();
             input_state.inventory_ui = None;
         } else {
-            let player = q_player.single();
             input_state.inventory_ui = Some(ui::create_player_inventory_ui(
                 commands,
                 &asset_server,
@@ -44,31 +45,67 @@ pub fn handle_player_actions(
 
     if let Some(pos) = mouse_pos {
         if input_state.dropping_items {
-            let xx = (pos.x + 8.0) / 32.0;
-            let yy = (pos.y - 8.0) / 32.0;
+            let mut perform_action = false;
+            match input_state.dropping_items_timer.as_mut() {
+                Some(timer) => {
+                    if timer.tick(time.delta()).finished() {
+                        perform_action = true;
+                    }
+                }
+                None => {
+                    perform_action = true;
+                    input_state.dropping_items_timer =
+                        Some(Timer::from_seconds(0.1, TimerMode::Repeating));
+                }
+            }
 
-            let item = DroppedItem {
-                item_type: items::IRON_SHEET,
-            };
-            commands.spawn((
-                sprites::create_dropped_item_sprite(&asset_server, &item, xx, yy),
-                item,
-            ));
+            if perform_action {
+                if let Some(item_type) = input_state.item_in_hand {
+                    if player.decrement_inventory(item_type) {
+                        let xx = (pos.x + 8.0) / 32.0;
+                        let yy = (pos.y - 8.0) / 32.0;
+
+                        let item = DroppedItem { item_type };
+                        commands.spawn((
+                            sprites::create_dropped_item_sprite(&asset_server, &item, xx, yy),
+                            item,
+                        ));
+                    }
+                    if !player.has_item_in_inventory(item_type) {
+                        input_state.item_in_hand = None;
+                    }
+                }
+            }
+        } else {
+            input_state.dropping_items_timer = None;
         }
 
         if input_state.picking_items {
-            if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
-                (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos.extend(0.0)) < 16.0 * 16.0
-            }) {
-                commands.entity(e).despawn_recursive();
-                
-                let mut player = q_player.single_mut();
-                if let Some((_, c)) = player.inventory.iter_mut().find(|(t, _)| *t == it.item_type) {
-                    *c += 1;
-                } else {
-                    player.inventory.push((it.item_type, 1));
+            let mut perform_action = false;
+            match input_state.picking_items_timer.as_mut() {
+                Some(timer) => {
+                    if timer.tick(time.delta()).finished() {
+                        perform_action = true;
+                    }
+                }
+                None => {
+                    perform_action = true;
+                    input_state.picking_items_timer =
+                        Some(Timer::from_seconds(0.1, TimerMode::Repeating));
                 }
             }
+
+            if perform_action {
+                if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
+                    (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos.extend(0.0)) < 16.0 * 16.0
+                }) {
+                    if player.increment_inventory(it.item_type) {
+                        commands.entity(e).despawn_recursive();
+                    }
+                }
+            }
+        } else {
+            input_state.picking_items_timer = None;
         }
 
         if input_state.deleting_tile {
