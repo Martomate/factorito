@@ -12,9 +12,10 @@ pub fn handle_player_actions(
     asset_server: Res<AssetServer>,
     q_windows: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform)>,
-    q_player: Query<&Player>,
+    mut q_player: Query<&mut Player>,
     mut input_state: ResMut<InputState>,
     mut game_world: ResMut<GameWorld>,
+    q_items: Query<(Entity, &Transform, &DroppedItem)>,
     q_tiles: Query<(Entity, &PlacedTile)>,
     q_resource_tiles: Query<(Entity, &ResourceTile)>,
     time: Res<Time>,
@@ -53,6 +54,21 @@ pub fn handle_player_actions(
                 sprites::create_dropped_item_sprite(&asset_server, &item, xx, yy),
                 item,
             ));
+        }
+
+        if input_state.picking_items {
+            if let Some((e, _, it)) = q_items.iter().find(|(_, tr, _)| {
+                (tr.translation - vec2(8.0, -8.0).extend(0.0)).distance_squared(pos.extend(0.0)) < 16.0 * 16.0
+            }) {
+                commands.entity(e).despawn_recursive();
+                
+                let mut player = q_player.single_mut();
+                if let Some((_, c)) = player.inventory.iter_mut().find(|(t, _)| *t == it.item_type) {
+                    *c += 1;
+                } else {
+                    player.inventory.push((it.item_type, 1));
+                }
+            }
         }
 
         if input_state.deleting_tile {

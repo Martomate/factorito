@@ -136,6 +136,7 @@ const PLAYER_SPEED: f32 = 200.;
 struct InputState {
     drag_start: Option<Vec2>,
     dropping_items: bool,
+    picking_items: bool,
     deleting_tile: bool,
     deleting_tile_timer: Option<Timer>,
     rotation: u8,

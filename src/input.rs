@@ -96,18 +96,7 @@ pub fn move_player(
 
     input_state.toggling_inventory_visible = kb_input.just_pressed(KeyCode::KeyE);
 
-    if kb_input.just_pressed(KeyCode::KeyB) {
-        input_state.item_in_hand = Some(items::BELT);
-    }
-    if kb_input.just_pressed(KeyCode::KeyM) {
-        input_state.item_in_hand = Some(items::MINER);
-    }
-    if kb_input.just_pressed(KeyCode::KeyI) {
-        input_state.item_in_hand = Some(items::INSERTER);
-    }
-    if kb_input.just_pressed(KeyCode::KeyF) {
-        input_state.item_in_hand = Some(items::FURNACE);
-    }
+    input_state.picking_items = kb_input.pressed(KeyCode::KeyF);
 
     if kb_input.just_pressed(KeyCode::KeyQ) {
         input_state.item_in_hand = None;
